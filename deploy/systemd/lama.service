@@ -1,0 +1,31 @@
+[Unit]
+Description=lama, application de l'institut
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=lama
+Group=lama
+WorkingDirectory=/opt/lama/actuelle
+Environment=NODE_ENV=production
+Environment=HOME=/var/lib/lama
+Environment=RCLONE_CONFIG=/var/lib/lama/rclone/rclone.conf
+ExecStart=/usr/bin/node /opt/lama/actuelle/dist-server/main.mjs
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lama -/mnt/lama-sauvegarde
+ReadOnlyPaths=/etc/lama
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=lama, sauvegarde de la base
+After=lama.service
+
+[Service]
+Type=oneshot
+User=lama
+Group=lama
+WorkingDirectory=/opt/lama/actuelle
+Environment=NODE_ENV=production
+Environment=HOME=/var/lib/lama
+Environment=RCLONE_CONFIG=/var/lib/lama/rclone/rclone.conf
+ExecStart=/usr/bin/node /opt/lama/actuelle/dist-server/cli.mjs sauvegarder
+TimeoutStartSec=30min
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lama -/mnt/lama-sauvegarde
+ReadOnlyPaths=/etc/lama

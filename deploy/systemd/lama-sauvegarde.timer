@@ -1,0 +1,9 @@
+[Unit]
+Description=lama, sauvegarde chaque nuit à 2 h (heure de Douala)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Africa/Douala
+Persistent=true
+
+[Install]
+WantedBy=timers.target

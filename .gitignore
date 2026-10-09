@@ -1,0 +1,15 @@
+node_modules
+dist
+data.db
+.DS_Store
+*.log
+.vite
+.wrangler
+.gstack
+.impeccable/mocks
+.impeccable/review
+.impeccable/decision-*.json
+.superpowers
+data
+dist-server
+paquets

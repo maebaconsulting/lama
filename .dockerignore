@@ -1,0 +1,27 @@
+# Contexte de fabrication de l'image (démo publique DP-08) : seulement ce qu'il faut pour fabriquer lama.
+# Jamais de données locales, de clé ni de secret dans l'image.
+.git
+node_modules
+dist
+dist-server
+data
+paquets
+# Motifs récursifs : à la racine comme dans tout sous-dossier.
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.log
+**/.env*
+**/*.key
+**/*.pem
+**/*.age
+.DS_Store
+.gstack
+.vite
+.superpowers
+.impeccable
+docs
+outils
+Dockerfile
+.dockerignore
+deploy

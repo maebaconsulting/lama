@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: true
+  sharp: false
+minimumReleaseAgeExclude:
+  - "@clawnify/app"
+  - "@clawnify/routes"

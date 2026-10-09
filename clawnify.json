@@ -1,0 +1,41 @@
+{
+  "$schema": "https://app.clawnify.com/schema/v1/clawnify.json",
+  "version": 1,
+  "name": "lama",
+  "description": "Appointment scheduling and management for beauty institutes in Africa. French and English interface, amounts in CFA francs.",
+  "icon": "icon.svg",
+  "tags": ["booking", "appointments", "beauty", "scheduling", "bilingual"],
+
+  "app": {
+    "framework": "preact+hono",
+    "database": true,
+    "storage": false
+  },
+
+  "deploy": {
+    "title": "Deploy lama",
+    "subtitle": "Appointments and management for a beauty institute, in French and English",
+    "prompts": [
+      {
+        "key": "company_name",
+        "label": "Institute name",
+        "placeholder": "e.g. Institut Démo",
+        "required": true
+      },
+      {
+        "key": "services",
+        "label": "What services do you offer?",
+        "type": "textarea",
+        "placeholder": "e.g. Radiance facial (FCFA 25,000, 60 min), Relaxing back massage (FCFA 15,000, 30 min)..."
+      },
+      {
+        "key": "details",
+        "label": "Any other details?",
+        "type": "textarea",
+        "placeholder": "Staff names, opening hours, languages spoken..."
+      }
+    ]
+  },
+
+  "agent": "agent.md"
+}

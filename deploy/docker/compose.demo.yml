@@ -1,0 +1,30 @@
+# Démonstration publique de lama pour Dokploy (démo publique DP-09).
+# Application « Compose » de Dokploy reliée au dépôt, fichier deploy/docker/compose.demo.yml.
+# Domaine et certificat réglés dans Dokploy : lama-demo.mowoapp.com, service lama, port 8080, HTTPS.
+# Aucun port publié sur l'hôte : seul le proxy de Dokploy (Traefik) joint lama, par le réseau dokploy-network.
+services:
+  lama:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: lama-demo
+    restart: always
+    expose:
+      - "8080"
+    environment:
+      LAMA_DEMO_PUBLIQUE: "1"
+      LAMA_PROXY_HTTPS: "1"
+      LAMA_LANGUE: fr
+      # Secret renseigné dans l'onglet Environment de Dokploy, 10 caractères au moins ; absent ou trop court, aucune administration.
+      LAMA_DEMO_MDP_ADMIN: ${LAMA_DEMO_MDP_ADMIN}
+    volumes:
+      - lama-demo-donnees:/data
+    networks:
+      - dokploy-network
+
+volumes:
+  lama-demo-donnees:
+
+networks:
+  dokploy-network:
+    external: true

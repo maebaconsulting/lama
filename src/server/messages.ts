@@ -1,0 +1,689 @@
+/**
+ * Messages du serveur dans les deux langues (spec § 6). La langue suit
+ * l'en-tête `Accept-Language` envoyé par l'écran (langue de la personne) ;
+ * sans en-tête, ou pour toute autre langue, l'anglais (agents IA, curl).
+ * Un message levé ou stocké (historique des sauvegardes, file d'envoi) est
+ * « codé » (`@clé {valeurs}`) et traduit à la sortie : réponse HTTP ou ligne de commande.
+ */
+import type { Context } from "hono";
+
+export type Lang = "fr" | "en";
+export type Values = Record<string, string | number>;
+
+export const DICTIONARY = {
+  "requete.trop_volumineuse": { fr: "Requête trop volumineuse.", en: "Request too large." },
+  "requete.xlama_manquant": { fr: "Requête refusée\u00a0: en-tête X-Lama manquant.", en: "Request refused: the X-Lama header is missing." },
+  "requete.invalide": { fr: "Saisie invalide\u00a0: {champ}.", en: "Invalid input: {champ}." },
+  "serveur.erreur": {
+    fr: "Erreur du serveur. Réessayez\u00a0; si cela persiste, prévenez l'administrateur.",
+    en: "Server error. Try again; if this continues, contact the administrator.",
+  },
+  "acces.refuse": { fr: "Accès refusé.", en: "Access denied." },
+  "acces.connexion_requise": { fr: "Connexion requise.", en: "Sign-in required." },
+  "acces.poste_verrouille": { fr: "Poste verrouillé.", en: "This shared device is locked." },
+  "acces.installation_requise": { fr: "Installation requise.", en: "Setup required." },
+  "acces.maintenance": { fr: "Maintenance en cours, réessayez dans un instant.", en: "Maintenance in progress, try again in a moment." },
+  "acces.confirmation_requise": { fr: "Confirmation par mot de passe requise.", en: "Password confirmation required." },
+  "acces.ecran_perime": { fr: "Cet écran date d'une version précédente de lama\u00a0: rechargez la page.", en: "This screen is from a previous version of lama: reload the page." },
+  "connexion.bloque": { fr: "Compte bloqué jusqu'à {heure}.", en: "Account locked until {heure}." },
+  "connexion.desactive": { fr: "Compte désactivé.", en: "This account is disabled." },
+  "connexion.incorrect": { fr: "Identifiant ou mot de passe incorrect.", en: "Incorrect username or password." },
+  "installation.deja_faite": { fr: "L'installation est déjà faite.", en: "Setup has already been done." },
+  "poste.inconnu": { fr: "Cet appareil n'est pas un poste partagé.", en: "This device is not a shared device." },
+  "compte.nom_obligatoire": { fr: "Le nom est obligatoire.", en: "A name is required." },
+  "compte.identifiant_invalide": { fr: "L'identifiant doit comporter 3 à 32 lettres, chiffres, points ou tirets.", en: "The username must have 3 to 32 letters, digits, dots or hyphens." },
+  "compte.role_inconnu": { fr: "Rôle inconnu.", en: "Unknown role." },
+  "compte.langue_inconnue": { fr: "Langue inconnue\u00a0: fr ou en attendu.", en: "Unknown language: fr or en expected." },
+  "compte.theme_inconnu": { fr: "Th\u00e8me inconnu\u00a0: light, dark ou system attendu.", en: "Unknown theme: light, dark or system expected." },
+  "compte.mot_de_passe_court": { fr: "Le mot de passe doit comporter au moins 10 caractères.", en: "The password must have at least 10 characters." },
+  "compte.pin_format": { fr: "Le code PIN doit comporter 4 à 6 chiffres.", en: "The PIN must have 4 to 6 digits." },
+  "compte.pin_simple": { fr: "Ce code PIN est trop simple, choisissez-en un autre.", en: "This PIN is too simple, choose another one." },
+  "compte.fiche_introuvable": { fr: "Fiche de l'équipe introuvable.", en: "Staff record not found." },
+  "compte.praticienne_sans_fiche": { fr: "Une praticienne doit être reliée à sa fiche de l'équipe.", en: "A practitioner must be linked to her staff record." },
+  "compte.identifiant_pris": { fr: "Cet identifiant est déjà utilisé.", en: "This username is already taken." },
+  // Module d'images commun (images des produits) : mêmes textes que le logo de la vague B ; le logo garde son propre texte de poids.
+  "image.format": { fr: "Format non pris en charge\u00a0: PNG ou JPEG attendu.", en: "Unsupported format: PNG or JPEG expected." },
+  "image.trop_lourd": { fr: "Fichier trop lourd\u00a0: 1\u00a0Mo au plus.", en: "File too large: 1 MB at most." },
+  "image.trop_grand": { fr: "Image trop grande\u00a0: 4\u00a0000 points de côté au plus.", en: "Image too large: 4,000 pixels per side at most." },
+  "image.illisible": { fr: "Image illisible\u00a0: le fichier semble abîmé.", en: "Unreadable image: the file seems damaged." },
+  "logo.trop_lourd": { fr: "Logo trop lourd\u00a0: 1\u00a0Mo au plus.", en: "Logo too large: 1 MB at most." },
+  "logo.absent": { fr: "Aucun logo déposé.", en: "No logo uploaded." },
+  "logo.variante": { fr: "Logo inconnu\u00a0: clair ou sombre attendu.", en: "Unknown logo: light or dark expected." },
+  "produit.introuvable": { fr: "Produit introuvable.", en: "Product not found." },
+  "produit.photo_absente": { fr: "Aucune photo pour ce produit.", en: "No photo for this product." },
+  "compte.introuvable": { fr: "Compte introuvable.", en: "Account not found." },
+  "compte.creation_interdite": { fr: "Vous ne pouvez pas créer ce type de compte.", en: "You cannot create this type of account." },
+  "compte.modification_interdite": { fr: "Vous ne pouvez pas modifier ce compte.", en: "You cannot change this account." },
+  "compte.desactivation_soi": { fr: "Vous ne pouvez pas désactiver votre propre compte.", en: "You cannot disable your own account." },
+  "compte.deblocage_interdit": { fr: "Vous ne pouvez pas débloquer ce compte.", en: "You cannot unlock this account." },
+  "reglage.inconnu": { fr: "Réglage inconnu.", en: "Unknown setting." },
+  "reglage.texte_long": { fr: "Texte de {max} caractères au plus attendu.", en: "Text of at most {max} characters expected." },
+  "reglage.marque": { fr: "Choix inconnu pour l'affichage de la marque.", en: "Unknown choice for the brand display." },
+  "reglage.langue": { fr: "Langue attendue\u00a0: fr ou en.", en: "Language expected: fr or en." },
+  "reglage.duree": { fr: "Durée attendue\u00a0: de 1 à 30 minutes.", en: "Duration expected: 1 to 30 minutes." },
+  "reglage.https": { fr: "Adresse https attendue.", en: "An https address is expected." },
+  "reglage.drive_format": { fr: "Format attendu\u00a0: remote:dossier.", en: "Expected format: remote:folder." },
+  "reglage.oui_non": { fr: "Oui ou non attendu (true ou false).", en: "Yes or no expected (true or false)." },
+  "reglage.taux": { fr: "Taux attendu\u00a0: de 0 à 100\u00a0%, deux décimales au plus.", en: "Rate expected: 0 to 100%, at most two decimals." },
+  "reglage.pourcentage": { fr: "Pourcentage entier attendu, de 0 à 100.", en: "Whole percentage expected, 0 to 100." },
+  "reglage.moyens": { fr: "Moyens de paiement attendus\u00a0: au moins un parmi cash, card, orange_money, momo.", en: "Payment methods expected: at least one of cash, card, orange_money, momo." },
+  "reglage.cle_absente": { fr: "Clé maîtresse non chargée\u00a0: redémarrez le serveur.", en: "Master key not loaded: restart the server." },
+  "reglage.prefixe": {
+    fr: "Préfixe des factures attendu\u00a0: 2 à 6 lettres ou chiffres, dont au moins une lettre, ni AV ni AC.",
+    en: "Invoice prefix expected: 2 to 6 letters or digits, at least one letter, neither AV nor AC.",
+  },
+  "reglage.prefixe_fige": {
+    fr: "Le préfixe des factures ne change plus\u00a0: la facture {numero} a déjà été émise avec lui.",
+    en: "The invoice prefix can no longer change: invoice {numero} has already been issued with it.",
+  },
+  "envoi.non_relancable": { fr: "Cet envoi ne peut pas être relancé.", en: "This item cannot be retried." },
+  "envoi.abandon": { fr: "Délai de 24\u00a0h dépassé, envoi abandonné.", en: "24-hour limit reached, item abandoned." },
+  "envoi.abandon_erreur": { fr: "Délai de 24\u00a0h dépassé, envoi abandonné. Dernière erreur\u00a0: {erreur}", en: "24-hour limit reached, item abandoned. Last error: {erreur}" },
+  "envoi.sans_gestionnaire": { fr: "Aucun gestionnaire pour ce type d'envoi.", en: "No handler for this type of item." },
+  "envoi.charge_invalide": { fr: "La charge n'est pas du JSON valide.", en: "The payload is not valid JSON." },
+  "reglage.fournisseur": { fr: "Fournisseur attendu\u00a0: aucun ou waha.", en: "Provider expected: aucun or waha." },
+  "reglage.imprimante": { fr: "Adresse IP de l'imprimante sur le réseau local attendue, par exemple 192.168.1.100 ou 192.168.1.100:9100.", en: "Printer IP address on the local network expected, for example 192.168.1.100 or 192.168.1.100:9100." },
+  "reglage.sms_fournisseur": { fr: "Fournisseur SMS attendu\u00a0: aucun ou passerelle.", en: "SMS provider expected: aucun or passerelle." },
+  "reglage.sms_adresse": { fr: "Adresse IP du téléphone passerelle sur le réseau local attendue, par exemple 192.168.1.60 ou 192.168.1.60:8080.", en: "Gateway phone IP address on the local network expected, for example 192.168.1.60 or 192.168.1.60:8080." },
+  "reglage.jours": { fr: "Nombre entier de jours attendu, de {min} à {max}.", en: "Whole number of days expected, from {min} to {max}." },
+  "campagne.etiquette_requise": { fr: "Choisissez une étiquette\u00a0: une campagne s'adresse aux clientes d'une étiquette.", en: "Choose a tag: a campaign is sent to the clients with a tag." },
+  "campagne.aucune_destinataire": {
+    fr: "Aucune cliente de cette étiquette ne peut recevoir de message (sans numéro valable ou en «\u00a0Aucun\u00a0»).",
+    en: "No client with this tag can receive a message (no valid number, or messages turned off).",
+  },
+  "reglage.minutes": { fr: "Nombre entier de minutes attendu, de {min} à {max}.", en: "Whole number of minutes expected, from {min} to {max}." },
+  "reglage.adresse_http": { fr: "Adresse http ou https attendue.", en: "An http or https address is expected." },
+  "reglage.session": { fr: "Nom de session attendu\u00a0: lettres, chiffres, tirets, 64 caractères au plus.", en: "Session name expected: letters, digits, hyphens, at most 64 characters." },
+  "reglage.indicatif": { fr: "Indicatif attendu\u00a0: 1 à 4 chiffres, sans +.", en: "Country code expected: 1 to 4 digits, without +." },
+  "reglage.rappel_heures": { fr: "Délai attendu\u00a0: de 1 à 72 heures.", en: "Delay expected: 1 to 72 hours." },
+  "reglage.heure": { fr: "Heure attendue au format hh:mm.", en: "Time expected as hh:mm." },
+  "reglage.fidelite_tranche": { fr: "Tranche attendue\u00a0: nombre entier de francs, de 100 à 1\u00a0000\u00a0000.", en: "Bracket expected: whole number of francs, from 100 to 1,000,000." },
+  "reglage.fidelite_points": { fr: "Points par tranche attendus\u00a0: nombre entier de 1 à 100.", en: "Points per bracket expected: whole number from 1 to 100." },
+  "reglage.paliers_nombre": { fr: "De 1 à 5 paliers de récompense attendus.", en: "1 to 5 reward tiers expected." },
+  "reglage.paliers_points": { fr: "Points d'un palier attendus\u00a0: nombre entier de 1 à 100\u00a0000.", en: "Tier points expected: whole number from 1 to 100,000." },
+  "reglage.paliers_montant": { fr: "Remise d'un palier attendue\u00a0: nombre entier de francs, de 100 à 10\u00a0000\u00a0000.", en: "Tier discount expected: whole number of francs, from 100 to 10,000,000." },
+  "reglage.paliers_ordre": { fr: "Chaque palier demande plus de points que le précédent.", en: "Each tier needs more points than the one before." },
+  "whatsapp.texte_vide": { fr: "Le texte du message est vide.", en: "The message text is empty." },
+  "whatsapp.variable_inconnue": { fr: "Variable inconnue\u00a0: {variable}. Variables permises\u00a0: {permises}.", en: "Unknown variable: {variable}. Allowed variables: {permises}." },
+  "whatsapp.injoignable": { fr: "Passerelle WhatsApp injoignable.", en: "WhatsApp gateway unreachable." },
+  "whatsapp.cle_refusee": { fr: "Clé de la passerelle WhatsApp refusée.", en: "WhatsApp gateway key refused." },
+  "whatsapp.session_non_connectee": { fr: "Session WhatsApp non connectée.", en: "WhatsApp session not connected." },
+  "whatsapp.debit": { fr: "Limite de débit de WhatsApp atteinte.", en: "WhatsApp rate limit reached." },
+  "whatsapp.passerelle_erreur": { fr: "Erreur de la passerelle WhatsApp (code {code}).", en: "WhatsApp gateway error (code {code})." },
+  "whatsapp.refus": { fr: "Message refusé par WhatsApp (code {code}).", en: "Message refused by WhatsApp (code {code})." },
+  "whatsapp.numero_absent": { fr: "Ce numéro n'a pas WhatsApp.", en: "This number is not on WhatsApp." },
+  "whatsapp.sans_fournisseur": { fr: "Aucun fournisseur WhatsApp\u00a0: à envoyer à la main.", en: "No WhatsApp provider: send it by hand." },
+  "whatsapp.numero_invalide": { fr: "Numéro de téléphone impossible à normaliser.", en: "The phone number cannot be normalised." },
+  "whatsapp.silence": { fr: "Fenêtre sans envoi\u00a0: le message partira à la fin.", en: "Quiet hours: the message will leave when they end." },
+  "whatsapp.pas_de_session": { fr: "Le fournisseur WhatsApp choisi n'a pas de session à connecter.", en: "The chosen WhatsApp provider has no session to connect." },
+  "whatsapp.action_inconnue": { fr: "Action attendue\u00a0: sent ou ignored.", en: "Action expected: sent or ignored." },
+  "whatsapp.deja_traite": { fr: "Ce message a déjà été traité.", en: "This message has already been handled." },
+  "whatsapp.cliente_introuvable": { fr: "Cliente introuvable.", en: "Client not found." },
+  "whatsapp.sans_numero": { fr: "Cette cliente n'a pas de numéro de téléphone.", en: "This client has no phone number." },
+  "whatsapp.pas_internet": { fr: "Pas d'internet.", en: "No internet." },
+  "whatsapp.ouvert": { fr: "Ouvert pour un envoi à la main\u00a0: marquez-le comme envoyé ou ignorez-le.", en: "Opened to send by hand: mark it as sent or ignore it." },
+  "sms.injoignable": { fr: "Passerelle SMS injoignable.", en: "SMS gateway unreachable." },
+  "sms.identifiants": { fr: "Identifiant ou mot de passe de la passerelle SMS refusé.", en: "SMS gateway username or password refused." },
+  "sms.passerelle_erreur": { fr: "Passerelle SMS en erreur (code {code}).", en: "SMS gateway error (code {code})." },
+  "sms.refus": { fr: "SMS refusé par la passerelle (code {code}).", en: "SMS refused by the gateway (code {code})." },
+  "sms.sans_fournisseur": { fr: "Aucune passerelle SMS\u00a0: à envoyer à la main.", en: "No SMS gateway: send it by hand." },
+  "sms.document_cliente_sms": { fr: "La cliente reçoit ses messages par SMS\u00a0: document à envoyer à la main.", en: "The client receives her messages by SMS: send the document by hand." },
+  "sms.photo_cliente_sms": { fr: "La cliente reçoit ses messages par SMS\u00a0: photo à envoyer à la main.", en: "The client receives her messages by SMS: send the photo by hand." },
+  "sms.echec_apres_whatsapp": { fr: "WhatsApp\u00a0: {whatsapp} SMS\u00a0: {sms}", en: "WhatsApp: {whatsapp} SMS: {sms}" },
+  "sms.essai": { fr: "Message d'essai de lama.", en: "Test message from lama." },
+  "sms.non_configure": { fr: "Aucune passerelle SMS réglée.", en: "No SMS gateway set up." },
+  "whatsapp.en_cours": { fr: "Ce message est en train de partir\u00a0: attendez quelques secondes.", en: "This message is being sent: wait a few seconds." },
+  "whatsapp.document_introuvable": { fr: "Document introuvable.", en: "Document not found." },
+  "whatsapp.document_non_pris": { fr: "Ce fournisseur WhatsApp n'envoie pas de document.", en: "This WhatsApp provider does not send documents." },
+  "whatsapp.photo_non_prise": { fr: "Ce fournisseur WhatsApp n'envoie pas de photo.", en: "This WhatsApp provider does not send photos." },
+  "whatsapp.document_annule": { fr: "Facture entièrement reprise par un avoir\u00a0: envoyez plutôt l'avoir.", en: "Invoice fully credited: send the credit note instead." },
+  "impression.injoignable": { fr: "Imprimante injoignable\u00a0: vérifiez qu'elle est allumée et branchée au réseau, et son adresse dans les réglages de la caisse.", en: "Printer unreachable: check that it is on and connected to the network, and its address in the checkout settings." },
+  "impression.papier": { fr: "Plus de papier dans l'imprimante.", en: "The printer is out of paper." },
+  "impression.capot": { fr: "Le capot de l'imprimante est ouvert.", en: "The printer cover is open." },
+  "impression.non_reglee": { fr: "Aucune imprimante réglée dans les réglages de la caisse.", en: "No printer set in the checkout settings." },
+  "impression.document_type": { fr: "Type de document attendu\u00a0: invoice, credit ou deposit.", en: "Document type expected: invoice, credit or deposit." },
+  "whatsapp.document_type": { fr: "Type de document attendu\u00a0: invoice, credit ou deposit.", en: "Document type expected: invoice, credit or deposit." },
+  "whatsapp.document_sans_cliente": { fr: "Ce document n'est au nom d'aucune cliente.", en: "This document is not in any client's name." },
+  "whatsapp.reponse_inattendue": { fr: "Réponse inattendue de la passerelle WhatsApp.", en: "Unexpected response from the WhatsApp gateway." },
+  "sauvegarde.non_configurees": { fr: "Sauvegardes non configurées sur ce serveur.", en: "Backups are not configured on this server." },
+  "sauvegarde.nom_invalide": { fr: "Nom de sauvegarde invalide.", en: "Invalid backup name." },
+  "sauvegarde.source_invalide": { fr: "Source de restauration invalide\u00a0: «\u00a0usb\u00a0» ou «\u00a0drive\u00a0» attendu.", en: "Invalid restore source: “usb” or “drive” expected." },
+  "sauvegarde.drive_invalide": { fr: "Destination Google Drive invalide\u00a0: {detail}", en: "Invalid Google Drive destination: {detail}" },
+  "sauvegarde.telechargement": { fr: "Téléchargement depuis Google Drive impossible\u00a0: {detail}", en: "Download from Google Drive failed: {detail}" },
+  "sauvegarde.introuvable_disque": { fr: "Sauvegarde introuvable sur le disque.", en: "Backup not found on the drive." },
+  "sauvegarde.dechiffrement": { fr: "Impossible de déchiffrer\u00a0: la clé privée ne correspond pas à cette sauvegarde.", en: "Cannot decrypt: the private key does not match this backup." },
+  "sauvegarde.integrite": { fr: "La sauvegarde échoue au contrôle d'intégrité\u00a0: {detail}", en: "The backup fails the integrity check: {detail}" },
+  "sauvegarde.controle_negatif": { fr: "contrôle négatif", en: "check failed" },
+  "sauvegarde.usb_absent": { fr: "Disque de sauvegarde introuvable ({dossier}). Branchez le disque LAMA-SAUVEGARDE.", en: "Backup drive not found ({dossier}). Plug in the LAMA-SAUVEGARDE drive." },
+  "drive.non_configure": { fr: "Google Drive n'est pas configuré\u00a0: {detail}", en: "Google Drive is not configured: {detail}" },
+  "drive.envoi_impossible": { fr: "Envoi vers Google Drive impossible pour l'instant\u00a0: {detail}", en: "Sending to Google Drive is not possible for now: {detail}" },
+  "drive.rclone_code": { fr: "rclone a échoué (code {code})", en: "rclone failed (code {code})" },
+  "rdv.introuvable": { fr: "Introuvable", en: "Not found" },
+  "suppression.cliente_historique": { fr: "Cette cliente a des rendez-vous\u00a0: sa fiche est gardée pour son historique.", en: "This client has appointments: the record is kept for her history." },
+  "suppression.prestation_historique": { fr: "Cette prestation figure dans des rendez-vous\u00a0: désactivez-la plutôt.", en: "This service appears in appointments: deactivate it instead." },
+  "suppression.membre_historique": { fr: "Ce membre de l'équipe a des rendez-vous\u00a0: désactivez sa fiche plutôt.", en: "This staff member has appointments: deactivate the record instead." },
+  "suppression.membre_compte": { fr: "Un compte est relié à ce membre de l'équipe\u00a0: désactivez sa fiche plutôt.", en: "An account is linked to this staff member: deactivate the record instead." },
+  "rdv.heures_format": { fr: "Les heures doivent être au format HH:MM", en: "Times must be HH:MM" },
+  "rdv.heures_plage": { fr: "Les heures vont de 07:00 à 21:00, par pas de 5 minutes.", en: "Times run from 07:00 to 21:00, in steps of 5 minutes." },
+  "rdv.fin_apres_fermeture": { fr: "Le rendez-vous finirait à {fin}, après la fermeture à {fermeture}.", en: "The appointment would end at {fin}, after closing time at {fermeture}." },
+  "rdv.duree_positive": { fr: "Le rendez-vous doit avoir une durée positive", en: "The appointment must have a positive duration" },
+  "rdv.meme_jour": { fr: "Un rendez-vous doit commencer et finir le même jour", en: "Appointments must start and end on the same day" },
+  "rdv.fin_apres_debut": { fr: "Le rendez-vous doit finir après son début, le même jour", en: "The appointment must end after it starts on the same day" },
+  "rdv.cliente_figee": { fr: "Ce rendez-vous a un acompte en attente ou une facture active\u00a0: sa cliente ne se change plus.", en: "This appointment has a pending deposit or an active invoice: its client can no longer be changed." },
+  "creneau.fin_apres_debut": { fr: "Un créneau bloqué doit finir après son début, le même jour", en: "Blocked time must end after it starts on the same day" },
+  "creneau.fin_apres_fermeture": { fr: "Le créneau bloqué finirait à {fin}, après la fermeture à {fermeture}.", en: "The blocked time would end at {fin}, after closing time at {fermeture}." },
+  "conflit.rdv": {
+    fr: "{qui} a déjà un rendez-vous à {liste}. Choisissez un autre horaire ou un autre membre de l'équipe, ou envoyez allow_conflict: true pour {verbe} malgré tout.",
+    en: "{qui} is already booked at {liste}. Choose another time or staff member, or send allow_conflict: true to {verbe} over it anyway.",
+  },
+  "conflit.indisponible": {
+    fr: "{qui} est indisponible à {liste}. Choisissez un autre horaire ou un autre membre de l'équipe, ou envoyez allow_conflict: true pour {verbe} malgré tout.",
+    en: "{qui} is unavailable at {liste}. Choose another time or staff member, or send allow_conflict: true to {verbe} over it anyway.",
+  },
+  "conflit.verbe.book": { fr: "réserver", en: "book" },
+  "conflit.verbe.block": { fr: "bloquer", en: "block" },
+  "conflit.ce_membre": { fr: "Ce membre de l'équipe", en: "That staff member" },
+  "conflit.autre_rdv": { fr: "autre réservation", en: "another appointment" },
+  "conflit.bloque": { fr: "bloqué", en: "blocked" },
+  "moyen.cash": { fr: "espèces", en: "cash" },
+  "moyen.card": { fr: "carte", en: "card" },
+  "moyen.orange_money": { fr: "Orange Money", en: "Orange Money" },
+  "moyen.momo": { fr: "MoMo", en: "MoMo" },
+  // Ticket de 80 mm (sous-projet 5 § 5.1) : dans la langue du document, jamais dans celle de l'écran qui l'imprime.
+  "ticket.duplicata": { fr: "DUPLICATA", en: "DUPLICATE" },
+  "ticket.test": { fr: "Ticket de test", en: "Test receipt" },
+  "ticket.test_adresse": { fr: "Imprimante\u00a0: {adresse}", en: "Printer: {adresse}" },
+  "ticket.facture": { fr: "FACTURE", en: "INVOICE" },
+  "ticket.avoir": { fr: "AVOIR", en: "CREDIT NOTE" },
+  "ticket.acompte": { fr: "REÇU D'ACOMPTE", en: "DEPOSIT RECEIPT" },
+  "ticket.telephone": { fr: "Tél.\u00a0{numero}", en: "Tel. {numero}" },
+  "ticket.niu": { fr: "NIU\u00a0: {valeur}", en: "Taxpayer no. (NIU): {valeur}" },
+  "ticket.rccm": { fr: "RCCM\u00a0: {valeur}", en: "Trade register (RCCM): {valeur}" },
+  "ticket.cliente": { fr: "Cliente\u00a0: {nom}", en: "Client: {nom}" },
+  "ticket.caisse": { fr: "Encaissé par {nom}", en: "Charged by {nom}" },
+  "ticket.etabli_par": { fr: "Établi par {nom}", en: "Issued by {nom}" },
+  "ticket.quantite": { fr: "{quantite}\u00a0×\u00a0{prix}", en: "{quantite}\u00a0×\u00a0{prix}" },
+  "ticket.sous_total": { fr: "Sous-total", en: "Subtotal" },
+  "ticket.remise": { fr: "Remise", en: "Discount" },
+  "ticket.remise_taux": { fr: "Remise {taux}\u00a0%", en: "Discount {taux}%" },
+  "ticket.motif.fidelite": { fr: "fidélité", en: "loyalty" },
+  "ticket.motif.geste": { fr: "geste commercial", en: "goodwill gesture" },
+  "ticket.total_ht": { fr: "Total HT", en: "Total excl. VAT" },
+  "ticket.tva": { fr: "TVA {taux}\u00a0%", en: "VAT {taux}%" },
+  "ticket.total_ttc": { fr: "Total TTC", en: "Total incl. VAT" },
+  "ticket.total": { fr: "Total", en: "Total" },
+  "ticket.tva_non_applicable": { fr: "TVA non applicable", en: "VAT not applicable" },
+  "ticket.reglement": { fr: "Règlement", en: "Payment" },
+  "ticket.monnaie_rendue": { fr: "Monnaie rendue", en: "Change given" },
+  "ticket.total_regle": { fr: "Total réglé", en: "Total paid" },
+  "ticket.pourboire": { fr: "Pourboire, hors facture", en: "Tip, not invoiced" },
+  "ticket.pourboire_pour": { fr: "Pour {nom}", en: "For {nom}" },
+  "ticket.facture_corrigee": { fr: "Facture corrigée\u00a0: {numero}", en: "Corrected invoice: {numero}" },
+  "ticket.motif": { fr: "Motif\u00a0: {motif}", en: "Reason: {motif}" },
+  "ticket.total_avoir": { fr: "Total de l'avoir", en: "Credit note total" },
+  "ticket.remboursement": { fr: "Remboursement", en: "Refund" },
+  "ticket.rendez_vous": { fr: "Rendez-vous du {date} à {heure}", en: "Appointment on {date} at {heure}" },
+  "ticket.acompte_recu": { fr: "Acompte reçu", en: "Deposit received" },
+  "ticket.acompte_deduit": { fr: "Acompte {numero}", en: "Deposit {numero}" },
+  "ticket.acompte_sort_deduit": { fr: "Déduit de la facture {numero} le {date}", en: "Deducted from invoice {numero} on {date}" },
+  "ticket.acompte_sort_rembourse": { fr: "Remboursé le {date}", en: "Refunded on {date}" },
+  "ticket.acompte_sort_garde": { fr: "Gardé le {date}", en: "Kept on {date}" },
+  "ticket.cloture": { fr: "CLÔTURE DE CAISSE", en: "TILL CLOSING" },
+  "ticket.cloture_numero": { fr: "{date} · n°\u00a0{numero}", en: "{date} · no.\u00a0{numero}" },
+  "ticket.cloture_periode": { fr: "De {debut} à {fin}", en: "From {debut} to {fin}" },
+  "ticket.cloture_suite": { fr: "Après la clôture n°\u00a0{numero}, jusqu'à {fin}", en: "After closing no. {numero}, until {fin}" },
+  "ticket.cloture_par": { fr: "Clôturée par {nom}", en: "Closed by {nom}" },
+  "ticket.factures_une": { fr: "{nombre} facture", en: "{nombre} invoice" },
+  "ticket.factures": { fr: "{nombre} factures", en: "{nombre} invoices" },
+  "ticket.avoirs_un": { fr: "{nombre} avoir", en: "{nombre} credit note" },
+  "ticket.avoirs": { fr: "{nombre} avoirs", en: "{nombre} credit notes" },
+  "ticket.acomptes_un": { fr: "{nombre} acompte reçu", en: "{nombre} deposit received" },
+  "ticket.acomptes": { fr: "{nombre} acomptes reçus", en: "{nombre} deposits received" },
+  "ticket.acomptes_rembourses_un": { fr: "{nombre} acompte remboursé", en: "{nombre} deposit refunded" },
+  "ticket.acomptes_rembourses": { fr: "{nombre} acomptes remboursés", en: "{nombre} deposits refunded" },
+  "ticket.recu_rembourse": { fr: "Reçu {recu}, remboursé {rembourse}", en: "Received {recu}, refunded {rembourse}" },
+  "ticket.especes_attendues": { fr: "Espèces attendues", en: "Cash expected" },
+  "ticket.especes_comptees": { fr: "Espèces comptées", en: "Cash counted" },
+  "ticket.ecart": { fr: "Écart", en: "Difference" },
+  "ticket.note": { fr: "Note\u00a0: {note}", en: "Note: {note}" },
+  "ticket.pourboires_dus": { fr: "Pourboires dus", en: "Tips owed" },
+  "ticket.cloturee_le": { fr: "Clôturée le {date} à {heure}", en: "Closed on {date} at {heure}" },
+  "ticket.merci": { fr: "Merci de votre visite, à très bientôt", en: "Thank you for your visit, see you soon" },
+  // Signature de lama en pied des documents (renommage lama, § 1) : discrète, en minuscules comme la marque.
+  "ticket.propulse": { fr: "propulsé par lama", en: "powered by lama" },
+  "ticket.recompense": { fr: "Récompense", en: "Reward" },
+  "ticket.points_gagnes": { fr: "Points gagnés", en: "Points earned" },
+  "ticket.points_repris": { fr: "Points repris", en: "Points taken back" },
+  "ticket.points_rendus": { fr: "Points rendus", en: "Points returned" },
+  "ticket.solde_fidelite": { fr: "Solde fidélité", en: "Loyalty balance" },
+  "ticket.point": { fr: "{nombre}\u00a0point", en: "{nombre}\u00a0point" },
+  "ticket.points": { fr: "{nombre}\u00a0points", en: "{nombre}\u00a0points" },
+  "vente.requete": { fr: "Identifiant de vente manquant ou invalide.", en: "Missing or invalid sale identifier." },
+  "vente.lignes": { fr: "Le ticket est vide.", en: "The ticket is empty." },
+  "vente.ligne_invalide": { fr: "Ligne du ticket invalide.", en: "Invalid ticket line." },
+  "vente.prestation_inconnue": { fr: "Prestation introuvable (n°\u00a0{id}).", en: "Service not found (no. {id})." },
+  "vente.produit_inconnu": { fr: "Produit introuvable (n°\u00a0{id}).", en: "Product not found (no. {id})." },
+  "vente.membre_inconnu": { fr: "Membre de l'équipe introuvable (n°\u00a0{id}).", en: "Staff member not found (no. {id})." },
+  "vente.cliente_inconnue": { fr: "Cliente introuvable.", en: "Client not found." },
+  "vente.cliente_obligatoire": { fr: "Choisissez la cliente\u00a0: le ticket contient une prestation.", en: "Choose the client: the ticket includes a service." },
+  "vente.rdv_inconnu": { fr: "Rendez-vous introuvable.", en: "Appointment not found." },
+  "vente.rdv_annule": { fr: "Ce rendez-vous est annulé\u00a0: il ne s'encaisse pas.", en: "This appointment is cancelled: it cannot be charged." },
+  "vente.acompte_comptoir": {
+    fr: "Un acompte se déduit au comptoir seulement d'une vente sans rendez-vous qui ne contient que des produits.",
+    en: "At the counter, a deposit can only be applied to a sale without an appointment that contains only products.",
+  },
+  "vente.rdv_deja_paye": { fr: "Ce rendez-vous est déjà encaissé (facture {numero}).", en: "This appointment is already paid (invoice {numero})." },
+  "vente.remise_desactivee": { fr: "Les remises sont désactivées.", en: "Discounts are turned off." },
+  "vente.remise_invalide": { fr: "Remise invalide\u00a0: pourcentage entier de 1 à 100, ou montant positif.", en: "Invalid discount: a whole percentage from 1 to 100, or a positive amount." },
+  "vente.remise_motif": { fr: "Le motif de la remise est obligatoire.", en: "A reason for the discount is required." },
+  "vente.pourboire_desactive": { fr: "Les pourboires sont désactivés.", en: "Tips are turned off." },
+  "vente.pourboire_invalide": { fr: "Pourboire invalide\u00a0: montant positif et praticienne attendus.", en: "Invalid tip: a positive amount and a practitioner are expected." },
+  "vente.versement_invalide": { fr: "Versement invalide.", en: "Invalid payment." },
+  "vente.moyen_refuse": { fr: "Moyen de paiement non proposé\u00a0: {moyen}.", en: "Payment method not offered: {moyen}." },
+  "vente.reference_obligatoire": { fr: "Référence de la transaction obligatoire pour {moyen}.", en: "A transaction reference is required for {moyen}." },
+  "vente.versements_total": {
+    fr: "Les versements ({recu}\u00a0F) ne couvrent pas exactement le montant à payer ({du}\u00a0F)\u00a0: le ticket a peut-être changé, vérifiez-le.",
+    en: "The payments ({recu}\u00a0F) do not exactly cover the amount due ({du}\u00a0F): the ticket may have changed, check it.",
+  },
+  "vente.stock": { fr: "Stock insuffisant pour «\u00a0{produit}\u00a0»\u00a0: vente refusée.", en: "Not enough stock for “{produit}”: sale refused." },
+  "vente.approbation": { fr: "Remise au-delà de {plafond}\u00a0%\u00a0: le mot de passe d'une gérante est demandé.", en: "Discount above {plafond}%: a manager's password is required." },
+  "vente.approbation_refusee": { fr: "Identifiant ou mot de passe de la gérante incorrect.", en: "Incorrect manager username or password." },
+  "vente.date": { fr: "Date attendue au format aaaa-mm-jj.", en: "Date expected as yyyy-mm-dd." },
+  "vente.praticienne_desactive": { fr: "L'encaissement par la praticienne n'est pas activé.", en: "Practitioner checkout is not turned on." },
+  "vente.praticienne_rdv": { fr: "Une praticienne n'encaisse que ses propres rendez-vous.", en: "A practitioner can only charge her own appointments." },
+  "vente.praticienne_statut": { fr: "Une praticienne n'encaisse qu'un rendez-vous en cours ou terminé.", en: "A practitioner can only charge an appointment that is in progress or completed." },
+  "vente.praticienne_remise": { fr: "Une praticienne n'applique pas de remise.", en: "A practitioner cannot apply a discount." },
+  "vente.praticienne_cliente": { fr: "Une praticienne n'encaisse que la cliente de son rendez-vous.", en: "A practitioner can only charge the client of her appointment." },
+  "vente.praticienne_acompte": {
+    fr: "Ce rendez-vous a un acompte\u00a0: la gérante ou la réception l'encaisse.",
+    en: "This appointment has a deposit: the manager or reception charges it.",
+  },
+  "vente.introuvable": { fr: "Aucune facture émise pour cette vente.", en: "No invoice was issued for this sale." },
+  "crm.inactif": { fr: "Mini CRM désactivé.", en: "Mini CRM turned off." },
+  "fidelite.inactive": { fr: "La fidélité n'est pas activée dans les réglages.", en: "Loyalty is not turned on in the settings." },
+  "fidelite.cliente": { fr: "Choisissez la cliente\u00a0: la récompense fidélité se prend sur ses points.", en: "Choose the client: the loyalty reward is taken from her points." },
+  "fidelite.palier": { fr: "Palier de récompense inconnu\u00a0: les paliers ont changé, choisissez de nouveau.", en: "Unknown reward tier: the tiers have changed, choose again." },
+  "fidelite.solde": { fr: "Points insuffisants\u00a0: {solde} pour un palier de {points}.", en: "Not enough points: {solde} for a {points}-point tier." },
+  "fidelite.correction_points": { fr: "Nombre de points attendu\u00a0: entier non nul, de −100\u00a0000 à 100\u00a0000.", en: "Number of points expected: a non-zero whole number from −100,000 to 100,000." },
+  "fidelite.correction_motif": { fr: "Le motif de la correction est obligatoire (200 caractères au plus).", en: "A reason for the correction is required (200 characters at most)." },
+  "facture.introuvable": { fr: "Facture introuvable.", en: "Invoice not found." },
+  "cloture.jour": { fr: "Jour de clôture attendu au format aaaa-mm-jj, aujourd'hui au plus tard.", en: "Closing day expected as yyyy-mm-dd, today at the latest." },
+  "cloture.especes": { fr: "Espèces comptées\u00a0: montant entier de 0 ou plus attendu.", en: "Cash counted: a whole amount of 0 or more is expected." },
+  "cloture.trop_ancien": {
+    fr: "Une journée se clôture dans les {jours} jours qui la suivent\u00a0; au-delà, elle reste consultable.",
+    en: "A day can be closed within {jours} days; after that it can still be viewed.",
+  },
+  "cloture.note": { fr: "Note de 500 caractères au plus.", en: "Note of 500 characters at most." },
+  "cloture.rien": { fr: "Rien n'a été encaissé depuis la dernière clôture de ce jour.", en: "Nothing has been taken since the last closing of this day." },
+  "cloture.requete_jour": {
+    fr: "Cet identifiant d'envoi a déjà servi pour un autre jour.",
+    en: "This request identifier was already used for another day.",
+  },
+  "cloture.introuvable": { fr: "Clôture introuvable.", en: "Closing not found." },
+  "cloture.pdf_echec": {
+    fr: "Le ticket de clôture n'a pas pu être fabriqué. Réessayez\u00a0; si cela persiste, prévenez l'administrateur.",
+    en: "The closing slip could not be produced. Try again; if this continues, contact the administrator.",
+  },
+  "avoir.reservee": { fr: "Les avoirs sont réservés à la gérante.", en: "Credit notes are reserved to the manager." },
+  "avoir.sur_avoir": { fr: "Un avoir ne se corrige pas par un autre avoir.", en: "A credit note cannot be corrected by another credit note." },
+  "avoir.motif": { fr: "Le motif de l'avoir est obligatoire (200 caractères au plus).", en: "A reason for the credit note is required (200 characters at most)." },
+  "avoir.lignes": { fr: "Choisissez au moins une ligne à reprendre.", en: "Choose at least one line to credit." },
+  "avoir.ligne_invalide": { fr: "Ligne de l'avoir invalide.", en: "Invalid credit note line." },
+  "avoir.quantite": { fr: "«\u00a0{designation}\u00a0»\u00a0: {reste} au plus à reprendre.", en: "“{designation}”: at most {reste} left to credit." },
+  "avoir.restock_prestation": { fr: "Seul un produit se remet en stock.", en: "Only a product can be put back in stock." },
+  "avoir.deja_annulee": { fr: "Cette facture est déjà entièrement reprise par des avoirs.", en: "This invoice has already been fully credited." },
+  "avoir.remboursement": {
+    fr: "Remboursements de {rembourse}\u00a0F pour un avoir de {du}\u00a0F\u00a0: ils doivent être égaux.",
+    en: "Refunds of {rembourse}\u00a0F for a credit note of {du}\u00a0F: they must be equal.",
+  },
+  "avoir.produit_supprime": { fr: "«\u00a0{produit}\u00a0» n'est plus au catalogue\u00a0: il ne peut pas être remis en stock.", en: "“{produit}” is no longer in the catalogue: it cannot be put back in stock." },
+  "acompte.montant": { fr: "Montant de l'acompte\u00a0: un nombre entier de francs, supérieur à 0.", en: "Deposit amount: a whole number of francs, above 0." },
+  "acompte.rdv_statut": { fr: "Un acompte se prend sur un rendez-vous à venir (réservé ou confirmé).", en: "A deposit can only be taken on an upcoming appointment (booked or confirmed)." },
+  "acompte.deja": { fr: "Un acompte attend déjà sur ce rendez-vous ({numero}).", en: "A deposit is already held on this appointment ({numero})." },
+  "acompte.plafond": { fr: "L'acompte ne dépasse pas le prix des prestations prévues ({prevu}\u00a0F).", en: "The deposit cannot exceed the price of the planned services ({prevu}\u00a0F)." },
+  "acompte.versements": {
+    fr: "Versements de {recu}\u00a0F pour un acompte de {du}\u00a0F\u00a0: ils doivent être égaux.",
+    en: "Payments of {recu}\u00a0F for a deposit of {du}\u00a0F: they must be equal.",
+  },
+  "acompte.remboursement": {
+    fr: "Remboursements de {recu}\u00a0F pour un acompte de {du}\u00a0F\u00a0: ils doivent être égaux.",
+    en: "Refunds of {recu}\u00a0F for a deposit of {du}\u00a0F: they must be equal.",
+  },
+  "acompte.action": { fr: "Choisissez «\u00a0Rembourser\u00a0» ou «\u00a0Garder\u00a0».", en: "Choose “Refund” or “Keep”." },
+  "acompte.motif": { fr: "Le motif est obligatoire pour garder un acompte (200 caractères au plus).", en: "A reason is required to keep a deposit (200 characters at most)." },
+  "acompte.introuvable": { fr: "Reçu d'acompte introuvable.", en: "Deposit receipt not found." },
+  "acompte.deja_solde": { fr: "Cet acompte a déjà été déduit, remboursé ou gardé.", en: "This deposit has already been applied, refunded or kept." },
+  "acompte.rdv_actif": {
+    fr: "Un acompte se rembourse ou se garde seulement si le rendez-vous est annulé ou la cliente absente.",
+    en: "A deposit can only be refunded or kept once the appointment is cancelled or the client did not show up.",
+  },
+  "acompte.desactive": { fr: "Les acomptes ne sont pas activés dans les réglages de la caisse.", en: "Deposits are not turned on in the checkout settings." },
+  "acompte.reservee": { fr: "Rembourser ou garder un acompte est réservé à la gérante.", en: "Refunding or keeping a deposit is reserved to the manager." },
+  "acompte.depasse": {
+    fr: "L'acompte {numero} ({acompte}\u00a0F) dépasse le total à payer ({du}\u00a0F)\u00a0: ajoutez au ticket ce que le rendez-vous prévoyait.",
+    en: "Deposit {numero} ({acompte}\u00a0F) is more than the total due ({du}\u00a0F): add to the ticket what the appointment planned.",
+  },
+  "acompte.autre_cliente": {
+    fr: "L'acompte {numero} appartient à une autre cliente\u00a0: il ne se déduit que de sa propre facture.",
+    en: "Deposit {numero} belongs to another client: it can only be applied to her own invoice.",
+  },
+  "acompte.rdv_attache": {
+    fr: "L'acompte {numero} reste attaché à son rendez-vous, ni annulé ni manqué\u00a0: il se déduit à l'encaissement de ce rendez-vous.",
+    en: "Deposit {numero} stays with its appointment, which is neither cancelled nor missed: it is applied when that appointment is charged.",
+  },
+  "acompte.depasse_comptoir": {
+    fr: "L'acompte {numero} ({acompte}\u00a0F) dépasse le total à payer ({du}\u00a0F)\u00a0: ajoutez des produits ou ne le déduisez pas.",
+    en: "Deposit {numero} ({acompte}\u00a0F) is more than the total due ({du}\u00a0F): add products or do not apply it.",
+  },
+  "acompte.pdf_echec": {
+    fr: "Le reçu d'acompte n'a pas pu être fabriqué. Réessayez\u00a0; si cela persiste, prévenez l'administrateur.",
+    en: "The deposit receipt could not be produced. Try again; if this continues, contact the administrator.",
+  },
+  "suppression.rdv_acompte": { fr: "Un acompte a été encaissé pour ce rendez-vous\u00a0: il ne se supprime plus, il peut être annulé.", en: "A deposit has been taken for this appointment: it can no longer be deleted, but it can be cancelled." },
+  "facture.pdf_echec": {
+    fr: "Le ticket n'a pas pu être fabriqué. Réessayez\u00a0; si cela persiste, prévenez l'administrateur.",
+    en: "The receipt could not be produced. Try again; if this continues, contact the administrator.",
+  },
+  "suppression.cliente_facturee": { fr: "Cette cliente a des factures\u00a0: sa fiche est gardée.", en: "This client has invoices: the record is kept." },
+  "suppression.rdv_facture": { fr: "Une facture a été émise pour ce rendez-vous\u00a0: il ne se supprime plus, il peut être annulé.", en: "An invoice has been issued for this appointment: it can no longer be deleted, but it can be cancelled." },
+  "suppression.membre_factures": { fr: "Ce membre de l'équipe figure sur des factures\u00a0: désactivez sa fiche plutôt.", en: "This staff member appears on invoices: deactivate the record instead." },
+  "cli.sauvegarde": { fr: "Sauvegarde\u00a0: disque USB {usb}, Google Drive en file d'envoi.", en: "Backup: USB drive {usb}, Google Drive queued." },
+  "cli.reussi": { fr: "réussi", en: "succeeded" },
+  "cli.echec": { fr: "en échec", en: "failed" },
+  "cli.restauration": { fr: "Restauration préparée, appliquée au prochain démarrage du service.", en: "Restore prepared, applied at the next service start." },
+  "cli.usage": {
+    fr: "Usage\u00a0: cli sauvegarder | cli restaurer <fichier.db.gz.age> <fichier-cle-privee> | cli waha-cle (clé sur l'entrée standard) | cli formation-comptes (quatre mots de passe sur l'entrée standard)",
+    en: "Usage: cli sauvegarder | cli restaurer <file.db.gz.age> <private-key-file> | cli waha-cle (key on standard input) | cli formation-comptes (four passwords on standard input)",
+  },
+  "cli.waha_cle": { fr: "Clé de WAHA inscrite dans les réglages.", en: "WAHA key saved in the settings." },
+  "cli.waha_cle_invalide": { fr: "Clé de WAHA attendue sur l'entrée standard, sans espace, 200 caractères au plus.", en: "WAHA key expected on standard input, without spaces, 200 characters at most." },
+  // Mini CRM (spec du 04/10/2026, § 1).
+  "cliente.anniversaire_format": { fr: "L'anniversaire doit être un jour et un mois valables (MM-JJ).", en: "The birthday must be a valid day and month (MM-DD)." },
+  "cliente.preferences_longueur": { fr: "Les préférences comptent 500 caractères au plus.", en: "Preferences have at most 500 characters." },
+  "cliente.etiquettes_format": { fr: "Les étiquettes doivent être une liste de textes.", en: "Tags must be a list of texts." },
+  "cliente.etiquette_longueur": { fr: "Une étiquette compte 30 caractères au plus.", en: "A tag has at most 30 characters." },
+  "cliente.carte_format": { fr: "Le numéro de carte compte 4 à 32 lettres ou chiffres.", en: "The card number has 4 to 32 letters or digits." },
+  "cliente.carte_prise": { fr: "Ce numéro de carte est déjà celui d'une autre cliente.", en: "This card number already belongs to another client." },
+  "cliente.etiquettes_nombre": { fr: "Une cliente porte 10 étiquettes au plus.", en: "A client has at most 10 tags." },
+  "cliente.introuvable": { fr: "Cliente introuvable.", en: "Client not found." },
+  "equipe.introuvable": { fr: "Praticienne introuvable.", en: "Practitioner not found." },
+  // Transfert des rendez-vous d'une praticienne absente (spec du 04/10/2026).
+  "transfert.periode": {
+    fr: "Période invalide\u00a0: une date de début et une date de fin (aaaa-mm-jj), dans l'ordre, 31 jours au plus.",
+    en: "Invalid period: a start date and an end date (yyyy-mm-dd), in order, 31 days at most.",
+  },
+  "transfert.praticienne_inconnue": { fr: "Praticienne introuvable.", en: "Practitioner not found." },
+  "transfert.corps": {
+    fr: "Transfert illisible\u00a0: praticienne de départ, mouvements (rendez-vous et collègue) et choix de prévenir les clientes attendus.",
+    en: "Unreadable transfer: the starting practitioner, the moves (appointment and colleague) and whether to notify clients are expected.",
+  },
+  "transfert.meme_praticienne": { fr: "Choisissez une collègue autre que la praticienne absente.", en: "Choose a colleague other than the absent practitioner." },
+  "transfert.doublon": { fr: "Un même rendez-vous figure deux fois dans le transfert.", en: "The same appointment appears twice in the transfer." },
+  "transfert.rien_ecrit": { fr: "Rien n'a été transféré\u00a0: l'agenda a changé entre-temps.", en: "Nothing was transferred: the calendar changed in the meantime." },
+  "transfert.refus.introuvable": { fr: "{ref}\u00a0: rendez-vous introuvable.", en: "{ref}: appointment not found." },
+  "transfert.refus.plus_a": { fr: "{ref} n'est plus à {de}.", en: "{ref} is no longer with {de}." },
+  "transfert.refus.statut": { fr: "{ref}\u00a0: rendez-vous en cours, terminé, annulé ou absente.", en: "{ref}: appointment in progress, completed, cancelled or no-show." },
+  "transfert.refus.commence": { fr: "{ref}\u00a0: rendez-vous déjà commencé.", en: "{ref}: appointment already started." },
+  "transfert.refus.inactive": { fr: "{ref}\u00a0: {qui} n'est plus active dans l'équipe.", en: "{ref}: {qui} is no longer active in the team." },
+  "transfert.refus.inconnue": { fr: "{ref}\u00a0: la collègue choisie n'existe plus.", en: "{ref}: the chosen colleague no longer exists." },
+  "transfert.refus.occupee": { fr: "{ref}\u00a0: {qui} n'est pas libre de {debut} à {fin}.", en: "{ref}: {qui} is not free from {debut} to {fin}." },
+  "transfert.note": { fr: "Transféré de {de} à {vers} le {date} par {par}.", en: "Transferred from {de} to {vers} on {date} by {par}." },
+  "transfert.journal_groupe.one": { fr: "{de} → {nombre} rendez-vous", en: "{de} → {nombre} appointment" },
+  "transfert.journal_groupe.other": { fr: "{de} → {nombre} rendez-vous", en: "{de} → {nombre} appointments" },
+  "transfert.journal_un": { fr: "{ref}\u00a0: {de} → {vers}", en: "{ref}: {de} → {vers}" },
+  // Page « Installer le certificat » (distribution D-09), servie en http par lama lui-même.
+  "certificat.titre": { fr: "Installer le certificat de lama", en: "Install the lama certificate" },
+  "certificat.autre_langue": { fr: "English", en: "Français" },
+  "certificat.intro": {
+    fr: "Pour ouvrir lama en connexion sécurisée (https), chaque appareil de l'institut approuve une fois le certificat de l'institut.",
+    en: "To open lama over a secure connection (https), each device of the institute approves the institute's certificate once.",
+  },
+  "certificat.une_fois": {
+    fr: "Ensuite, ouvrez lama à l'adresse https://lama.local, sans avertissement.",
+    en: "Then open lama at https://lama.local, without any warning.",
+  },
+  "certificat.absent": {
+    fr: "Le certificat n'est pas encore fabriqué sur le serveur. Prévenez le technicien\u00a0: sudo lama-certificat --adresse suivi de l'adresse du serveur.",
+    en: "The certificate has not been made on the server yet. Tell the technician: sudo lama-certificat --adresse followed by the server address.",
+  },
+  "certificat.etapes": { fr: "Étapes pour cet appareil", en: "Steps for this device" },
+  "certificat.appareil.ios": { fr: "iPhone et iPad", en: "iPhone and iPad" },
+  "certificat.appareil.android": { fr: "Téléphone ou tablette Android", en: "Android phone or tablet" },
+  "certificat.appareil.windows": { fr: "Ordinateur Windows", en: "Windows computer" },
+  "certificat.appareil.mac": { fr: "Ordinateur Mac", en: "Mac computer" },
+  "certificat.telecharger_profil": { fr: "Télécharger le profil", en: "Download the profile" },
+  "certificat.telecharger_certificat": { fr: "Télécharger le certificat", en: "Download the certificate" },
+  "certificat.ios.1": {
+    fr: "Ouvrez cette page dans Safari, touchez «\u00a0Télécharger le profil\u00a0» puis «\u00a0Autoriser\u00a0».",
+    en: "Open this page in Safari, tap “Download the profile”, then “Allow”.",
+  },
+  "certificat.ios.2": {
+    fr: "Ouvrez «\u00a0Réglages\u00a0», touchez «\u00a0Profil téléchargé\u00a0» en haut de la liste, puis «\u00a0Installer\u00a0», et saisissez le code de l'appareil.",
+    en: "Open “Settings”, tap “Profile Downloaded” at the top of the list, then “Install”, and enter the device passcode.",
+  },
+  "certificat.ios.3": {
+    fr: "Dans «\u00a0Réglages\u00a0», «\u00a0Général\u00a0», «\u00a0Informations\u00a0», «\u00a0Réglages des certificats\u00a0», activez l'autorité de lama.",
+    en: "In “Settings”, “General”, “About”, “Certificate Trust Settings”, turn on the lama authority.",
+  },
+  "certificat.ios.4": { fr: "Revenez ici et touchez «\u00a0Vérifier la connexion sécurisée\u00a0».", en: "Come back here and tap “Check the secure connection”." },
+  "certificat.android.1": {
+    fr: "Touchez «\u00a0Télécharger le certificat\u00a0»\u00a0: le fichier lama-autorite.crt arrive dans les téléchargements.",
+    en: "Tap “Download the certificate”: the file lama-autorite.crt arrives in your downloads.",
+  },
+  "certificat.android.2": {
+    fr: "Ouvrez «\u00a0Paramètres\u00a0», «\u00a0Sécurité\u00a0» (le nom varie selon le téléphone), «\u00a0Chiffrement et identifiants\u00a0», «\u00a0Installer un certificat\u00a0», «\u00a0Certificat CA\u00a0».",
+    en: "Open “Settings”, “Security” (the name varies with the phone), “Encryption and credentials”, “Install a certificate”, “CA certificate”.",
+  },
+  "certificat.android.3": {
+    fr: "Touchez «\u00a0Installer quand même\u00a0», puis choisissez lama-autorite.crt dans les téléchargements.",
+    en: "Tap “Install anyway”, then choose lama-autorite.crt in your downloads.",
+  },
+  "certificat.android.4": { fr: "Revenez ici et touchez «\u00a0Vérifier la connexion sécurisée\u00a0».", en: "Come back here and tap “Check the secure connection”." },
+  "certificat.windows.1": {
+    fr: "Cliquez sur «\u00a0Télécharger le certificat\u00a0», puis ouvrez le fichier lama-autorite.crt.",
+    en: "Click “Download the certificate”, then open the file lama-autorite.crt.",
+  },
+  "certificat.windows.2": {
+    fr: "Cliquez sur «\u00a0Installer le certificat\u00a0», choisissez «\u00a0Ordinateur local\u00a0», puis placez-le dans «\u00a0Autorités de certification racines de confiance\u00a0».",
+    en: "Click “Install Certificate”, choose “Local Machine”, then place it in “Trusted Root Certification Authorities”.",
+  },
+  "certificat.windows.3": { fr: "Terminez l'assistant, puis fermez et rouvrez le navigateur.", en: "Finish the wizard, then close and reopen the browser." },
+  "certificat.windows.4": { fr: "Revenez ici et cliquez sur «\u00a0Vérifier la connexion sécurisée\u00a0».", en: "Come back here and click “Check the secure connection”." },
+  "certificat.mac.1": {
+    fr: "Cliquez sur «\u00a0Télécharger le certificat\u00a0», puis ouvrez le fichier lama-autorite.crt et ajoutez-le au trousseau «\u00a0Système\u00a0».",
+    en: "Click “Download the certificate”, then open the file lama-autorite.crt and add it to the “System” keychain.",
+  },
+  "certificat.mac.2": {
+    fr: "Dans «\u00a0Trousseaux d'accès\u00a0», ouvrez l'autorité de lama, dépliez «\u00a0Se fier\u00a0» et choisissez «\u00a0Toujours approuver\u00a0».",
+    en: "In “Keychain Access”, open the lama authority, expand “Trust” and choose “Always Trust”.",
+  },
+  "certificat.mac.3": { fr: "Fermez la fenêtre, confirmez avec le mot de passe du Mac, puis rouvrez le navigateur.", en: "Close the window, confirm with the Mac password, then reopen the browser." },
+  "certificat.mac.4": { fr: "Revenez ici et cliquez sur «\u00a0Vérifier la connexion sécurisée\u00a0».", en: "Come back here and click “Check the secure connection”." },
+  "certificat.empreinte_titre": { fr: "Empreinte de l'autorité", en: "Authority fingerprint" },
+  "certificat.empreinte_aide": {
+    fr: "L'appareil montre cette empreinte (SHA-256) dans le détail du certificat\u00a0: elle doit être identique. Sinon, n'approuvez rien et prévenez le technicien.",
+    en: "The device shows this fingerprint (SHA-256) in the certificate details: it must be identical. Otherwise, approve nothing and tell the technician.",
+  },
+  "certificat.verifier_titre": { fr: "Vérifier", en: "Check" },
+  "certificat.verifier_aide": {
+    fr: "Si le navigateur affiche un avertissement, le certificat n'est pas encore approuvé\u00a0: reprenez les étapes.",
+    en: "If the browser shows a warning, the certificate is not approved yet: go through the steps again.",
+  },
+  "certificat.verifier": { fr: "Vérifier la connexion sécurisée", en: "Check the secure connection" },
+  "certificat.qr_titre": { fr: "Ouvrir cette page sur un autre appareil", en: "Open this page on another device" },
+  "certificat.qr_aide": { fr: "Scannez ce code avec l'appareil photo de l'appareil.", en: "Scan this code with the device's camera." },
+  "certificat.qr_alt": { fr: "QR code de la page d'installation du certificat", en: "QR code of the certificate installation page" },
+  "certificat.profil_nom": { fr: "lama, certificat de l'institut", en: "lama, institute certificate" },
+  "certificat.profil_autorite": { fr: "Autorité de lama", en: "lama authority" },
+  "certificat.profil_description": {
+    fr: "Permet d'ouvrir lama en https sur le réseau de l'institut (lama.local et adresses locales seulement).",
+    en: "Lets this device open lama over https on the institute's network (lama.local and local addresses only).",
+  },
+  "certificat.ok_titre": { fr: "Connexion sécurisée", en: "Secure connection" },
+  "certificat.ok_texte": {
+    fr: "Le certificat est approuvé sur cet appareil. Ouvrez lama à l'adresse https://lama.local.",
+    en: "The certificate is approved on this device. Open lama at https://lama.local.",
+  },
+  "certificat.ouvrir_lama": { fr: "Ouvrir lama", en: "Open lama" },
+  "certificat.non_securise_titre": { fr: "Connexion non sécurisée", en: "Connection not secure" },
+  "certificat.non_securise_texte": {
+    fr: "Cette page est ouverte sans https\u00a0: le serveur n'a pas encore de certificat, ou l'adresse est restée en http.",
+    en: "This page is open without https: the server has no certificate yet, or the address stayed on http.",
+  },
+  "certificat.retour_etapes": { fr: "Revoir les étapes", en: "See the steps again" },
+  // Caisse gardée contre une heure qui recule (distribution D-13).
+  "caisse.heure_recule": {
+    fr: "L'heure du serveur est antérieure au dernier document émis (facture, avoir ou acompte) ({derniere})\u00a0: ventes, avoirs et acomptes sont bloqués. L'administrateur remet le serveur à l'heure dans «\u00a0Réglages\u00a0», «\u00a0Heure\u00a0».",
+    en: "The server time is earlier than the last issued document (invoice, credit note or deposit) ({derniere}): sales, credit notes and deposits are blocked. The administrator sets the server time in “Settings”, “Time”.",
+  },
+  // Correction de l'heure du serveur (distribution D-12).
+  "heure.invalide": { fr: "Heure invalide.", en: "Invalid time." },
+  "heure.indisponible": {
+    fr: "Ce serveur ne sait pas changer son heure (timedatectl introuvable).",
+    en: "This server cannot change its time (timedatectl not found).",
+  },
+  "heure.autorisation": {
+    fr: "Le serveur n'a pas le droit de changer son heure (règle polkit absente). Le technicien relance sudo ./deploy/installer.sh, ou règle l'heure avec sudo timedatectl set-time.",
+    en: "The server is not allowed to change its time (polkit rule missing). The technician runs sudo ./deploy/installer.sh again, or sets the time with sudo timedatectl set-time.",
+  },
+  "heure.echec": { fr: "Le serveur n'a pas pu changer son heure\u00a0: {detail}", en: "The server could not change its time: {detail}" },
+  "manifeste.description": { fr: "lama, gestion des instituts de beauté", en: "lama, beauty institute management" },
+  // Base de formation (distribution, vague 3).
+  "formation.installation": {
+    fr: "Base de formation\u00a0: les comptes sont créés par le technicien (sudo lama-formation --comptes).",
+    en: "Training database: the accounts are created by the technician (sudo lama-formation --comptes).",
+  },
+  "formation.vraie_base": {
+    fr: "Base de formation refusée\u00a0: {chemin} est dans la vraie base ({vraie}). La formation a ses propres dossiers.",
+    en: "Training database refused: {chemin} is inside the real database ({vraie}). The training database has its own folders.",
+  },
+  "manifeste.formation": { fr: "lama formation", en: "lama training" },
+  "formation.compte.admin": { fr: "Administration (formation)", en: "Administration (training)" },
+  "formation.compte.gerante": { fr: "Gérante (formation)", en: "Manager (training)" },
+  "formation.compte.reception": { fr: "Réception (formation)", en: "Reception (training)" },
+  "formation.compte.praticienne": { fr: "Praticienne (formation)", en: "Practitioner (training)" },
+  "formation.mots_de_passe": {
+    fr: "Quatre mots de passe attendus, un par ligne\u00a0: administration, gérante, réception, praticienne.",
+    en: "Four passwords expected, one per line: administration, manager, reception, practitioner.",
+  },
+  "cli.formation_seulement": { fr: "Commande réservée à la base de formation (LAMA_FORMATION=1).", en: "Command reserved for the training database (LAMA_FORMATION=1)." },
+  "formation.reservee": { fr: "Réservé à la base de formation.", en: "Reserved for the training database." },
+  "formation.coupe": {
+    fr: "Base de formation\u00a0: rien ne part de cette base (messages, sauvegardes, heure du serveur).",
+    en: "Training database: nothing leaves this database (messages, backups, server time).",
+  },
+  "cli.formation_sans_sauvegarde": { fr: "Base de formation\u00a0: aucune sauvegarde ni restauration.", en: "Training database: no backup and no restore." },
+  "formation.ticket": { fr: "FORMATION", en: "TRAINING" },
+  "formation.remise_faite": { fr: "Base de formation remise à zéro\u00a0: démonstration recréée, postes gardés.", en: "Training database reset: demonstration recreated, devices kept." },
+  "formation.remise_comptes": { fr: "Comptes de formation rétablis\u00a0: {comptes}.", en: "Training accounts restored: {comptes}." },
+  "formation.remise_sans_compte": { fr: "Aucun compte de formation gardé\u00a0: lancez sudo lama-formation --comptes.", en: "No training account kept: run sudo lama-formation --comptes." },
+  "formation.remise_illisible": { fr: "Base de formation illisible\u00a0: refaite sans aucun compte gardé, lancez sudo lama-formation --comptes.", en: "Training database unreadable: rebuilt with no account kept, run sudo lama-formation --comptes." },
+  "formation.remise_echec": { fr: "Remise à zéro de la formation\u00a0: comptes non rétablis ({detail}), lancez sudo lama-formation --comptes.", en: "Training reset: accounts not restored ({detail}), run sudo lama-formation --comptes." },
+  "cli.formation_comptes": { fr: "Comptes de formation prêts\u00a0: {comptes}.", en: "Training accounts ready: {comptes}." },
+  // Démonstration publique (démo publique).
+  "manifeste.demo": { fr: "lama démo", en: "lama demo" },
+  "demo.ticket": { fr: "DÉMONSTRATION", en: "DEMO" },
+  "demo.compte.gerante": { fr: "Gérante (démo)", en: "Manager (demo)" },
+  "demo.compte.reception": { fr: "Réception (démo)", en: "Reception (demo)" },
+  "demo.compte.praticienne": { fr: "Praticienne (démo)", en: "Practitioner (demo)" },
+  "demo.compte.admin": { fr: "Administration (démo)", en: "Administration (demo)" },
+  "demo.remise_faite": { fr: "Démonstration remise à zéro\u00a0: données recréées, aucun poste gardé.", en: "Demo reset: data recreated, no device kept." },
+  "demo.comptes_prets": { fr: "Comptes de démonstration prêts\u00a0: {comptes}.", en: "Demo accounts ready: {comptes}." },
+  "demo.admin_pret": { fr: "Administration de la démonstration prête ({login}).", en: "Demo administration ready ({login})." },
+  "demo.admin_absent": {
+    fr: "LAMA_DEMO_MDP_ADMIN absente\u00a0: aucun compte d'administration dans la démonstration.",
+    en: "LAMA_DEMO_MDP_ADMIN not set: no administration account in the demo.",
+  },
+  "demo.admin_court": {
+    fr: "LAMA_DEMO_MDP_ADMIN trop courte (10 caractères au moins)\u00a0: la démonstration démarre sans compte d'administration. Corrigez la variable du service.",
+    en: "LAMA_DEMO_MDP_ADMIN too short (at least 10 characters): the demo starts without an administration account. Fix the service variable.",
+  },
+  "demo.reservee": {
+    fr: "Comptes publics réservés à la démonstration publique (LAMA_DEMO_PUBLIQUE=1).",
+    en: "Public accounts are reserved for the public demo (LAMA_DEMO_PUBLIQUE=1).",
+  },
+  "demo.fichiers_coupes": {
+    fr: "Démonstration\u00a0: l'envoi de fichiers est coupé (logo, photos des produits).",
+    en: "Demo: file uploads are disabled (logo, product photos).",
+  },
+  "demo.compte_fige": {
+    fr: "Compte de démonstration\u00a0: son mot de passe, son code PIN et sa fiche ne se changent pas.",
+    en: "Demo account: its password, PIN and details cannot be changed.",
+  },
+  "demo.remise_nocturne": {
+    fr: "Remise à zéro de la nuit\u00a0: demande déposée, la démonstration s'arrête et repart neuve.",
+    en: "Nightly reset: request filed, the demo stops and starts again fresh.",
+  },
+  "demo.remise_nocturne_echec": {
+    fr: "Remise à zéro de la nuit\u00a0: demande non déposée ({detail})\u00a0; la démonstration continue sans remise.",
+    en: "Nightly reset: request not filed ({detail}); the demo carries on without a reset.",
+  },
+  "demo.comptes_echec": { fr: "Démonstration\u00a0: comptes non rétablis ({detail}).", en: "Demo: accounts not restored ({detail})." },
+} satisfies Record<string, { fr: string; en: string }>;
+
+export type MessageKey = keyof typeof DICTIONARY;
+
+/** Langue de l'écran qui demande : français si la première langue de `Accept-Language` est `fr` ou `fr-…`, anglais sinon. */
+export function langOf(acceptLanguage: string | null | undefined): Lang {
+  const first = (acceptLanguage ?? "").split(",")[0].split(";")[0].trim().toLowerCase();
+  return first === "fr" || first.startsWith("fr-") ? "fr" : "en";
+}
+
+export function requestLang(c: Context): Lang {
+  return langOf(c.req.header("accept-language"));
+}
+
+/** Langue de la ligne de commande et des scripts (spec § 8.1) : `LAMA_LANGUE` (fr ou en) force, sinon `LANG`. */
+export function langFromEnv(env: Record<string, string | undefined>): Lang {
+  if (env.LAMA_LANGUE === "fr" || env.LAMA_LANGUE === "en") return env.LAMA_LANGUE;
+  return (env.LANG ?? "").toLowerCase().startsWith("en") ? "en" : "fr";
+}
+
+/** Texte d'un message, `{nom}` remplacé par `values.nom`. */
+export function message(lang: Lang, key: MessageKey, values: Values = {}): string {
+  return DICTIONARY[key][lang].replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole));
+}
+
+/** Message dans la langue de la requête. */
+export function msg(c: Context, key: MessageKey, values?: Values): string {
+  return message(requestLang(c), key, values);
+}
+
+/** Forme codée d'un message, à lever ou à stocker : `@clé` ou `@clé {"nom":"valeur"}`. */
+export function coded(key: MessageKey, values: Values = {}): string {
+  return Object.keys(values).length ? `@${key} ${JSON.stringify(values)}` : `@${key}`;
+}
+
+/** Traduit une forme codée (et ses valeurs codées) ; tout autre texte (sortie de rclone, ancien message) est rendu tel quel. */
+export function decode(lang: Lang, text: string): string {
+  const m = /^@([a-z0-9_.]+)(?: (\{[\s\S]*\}))?$/.exec(text);
+  if (!m || !Object.hasOwn(DICTIONARY, m[1])) return text;
+  let values: Values = {};
+  if (m[2]) {
+    try {
+      values = JSON.parse(m[2]) as Values;
+    } catch {
+      return text;
+    }
+  }
+  const decoded = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, typeof v === "string" ? decode(lang, v) : v]));
+  return message(lang, m[1] as MessageKey, decoded);
+}
+
+/** Texte levé ou stocké, dans la langue de la requête. */
+export function localize(c: Context, text: string): string {
+  return decode(requestLang(c), text);
+}
+
+/** Erreur portant un message du dictionnaire ; `message` est sa forme codée, traduite à la sortie. */
+export class MessageError extends Error {
+  readonly key: MessageKey;
+  readonly values: Values;
+
+  constructor(key: MessageKey, values: Values = {}) {
+    super(coded(key, values));
+    this.name = "MessageError";
+    this.key = key;
+    this.values = values;
+  }
+}

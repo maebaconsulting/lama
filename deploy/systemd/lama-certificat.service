@@ -1,0 +1,8 @@
+[Unit]
+Description=lama, renouvellement du certificat du serveur au seuil de 90 jours
+Wants=time-sync.target
+After=time-sync.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lama-certificat --renouveler

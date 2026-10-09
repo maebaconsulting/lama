@@ -1,0 +1,9 @@
+[Unit]
+Description=lama, contrôle du certificat du serveur le 1er de chaque mois (heure de Douala)
+
+[Timer]
+OnCalendar=*-*-01 03:30:00 Africa/Douala
+Persistent=true
+
+[Install]
+WantedBy=timers.target

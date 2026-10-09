@@ -1,0 +1,37 @@
+[Unit]
+Description=lama, base de formation (port 8443)
+After=network-online.target lama.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=lama-formation
+Group=lama-formation
+# Groupe lama : lecture de la clé du certificat de l'institut (root:lama 0640), le seul fichier de /etc/lama visible ici.
+SupplementaryGroups=lama
+WorkingDirectory=/opt/lama/actuelle
+Environment=NODE_ENV=production
+Environment=HOME=/var/lib/lama-formation
+Environment=LAMA_FORMATION=1
+ExecStart=/usr/bin/node /opt/lama/actuelle/dist-server/main.mjs
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+UMask=0077
+CapabilityBoundingSet=
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lama-formation
+ReadOnlyPaths=/etc/lama-formation
+# /etc/lama remplacé par un dossier vide, sauf le certificat : ni la clé maîtresse ni la clé de sauvegarde de la vraie base.
+TemporaryFileSystem=/etc/lama:ro
+BindReadOnlyPaths=/etc/lama/tls
+# Vraie base et disque de sauvegarde hors d'atteinte, quoi que fasse le programme.
+InaccessiblePaths=/var/lib/lama -/mnt/lama-sauvegarde
+
+[Install]
+WantedBy=multi-user.target

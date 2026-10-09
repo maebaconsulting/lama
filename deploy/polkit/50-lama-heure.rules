@@ -1,0 +1,11 @@
+// lama (distribution D-12) : le compte de service lama règle l'horloge du
+// système depuis Réglages > Heure, sans sudo ni droits root. Deux gestes de
+// timedate1 seulement : régler l'heure, et couper puis rétablir la
+// synchronisation (timedated refuse de régler l'heure tant qu'elle est
+// active). Ni le fuseau, ni l'horloge matérielle, ni aucune autre action.
+polkit.addRule(function (action, subject) {
+  if (subject.user === "lama" && (action.id === "org.freedesktop.timedate1.set-time" || action.id === "org.freedesktop.timedate1.set-ntp")) {
+    return polkit.Result.YES;
+  }
+  return polkit.Result.NOT_HANDLED;
+});
