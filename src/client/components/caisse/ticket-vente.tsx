@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { useAuth, useCrm } from "../../auth-context";
+import { useApp } from "../../context";
+import { canSell } from "@/lib/roles";
 import { ChevronLeft, Minus, Plus, X } from "lucide-preact";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/provider";
@@ -61,6 +63,7 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
 }) {
   const { t, lang } = useI18n();
   const { account } = useAuth();
+  const { addClient } = useApp();
   const crm = useCrm();
   const [fenetre, setFenetre] = useState<Fenetre>(null);
   const client = clients.find((c) => c.id === ticket.client_id) ?? null;
@@ -222,7 +225,13 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
       </div>
 
       {fenetre === "cliente" && (
-        <ChoixCliente clients={clients} current={ticket.client_id} onClose={() => setFenetre(null)} onDone={(id) => { onChange(setClient(ticket, id)); setFenetre(null); }} />
+        <ChoixCliente
+          clients={clients}
+          current={ticket.client_id}
+          onClose={() => setFenetre(null)}
+          onDone={(id) => { onChange(setClient(ticket, id)); setFenetre(null); }}
+          onCreate={canSell(account.role) ? async (data) => (await addClient(data)).id : undefined}
+        />
       )}
       {fenetre === "remise" && (
         <FenetreRemise subtotal={totals.subtotal} cap={settings.discount_cap ?? 0} current={reward !== null ? null : ticket.discount} onClose={() => setFenetre(null)} onDone={(d) => { onChange(setDiscount(ticket, d)); setFenetre(null); }} />

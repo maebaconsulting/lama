@@ -14,12 +14,14 @@ import { matchesSearch } from "@/lib/bilingual";
 import { cardChoice, cardMatches } from "@/lib/crm";
 import { reasonLabel } from "@/lib/caisse-texte";
 import { formatPrice, parseAmount } from "@/lib/format";
+import { nameProblem } from "@/lib/forms";
 import { pointsText, type RewardChoice } from "@/lib/fidelite";
 import { rewardDiscount, type TicketDiscount } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 import { DISCOUNT_REASONS, discountAmount, exceedsCap } from "../../../shared/caisse";
 import type { ClientLookup, StaffLookup } from "../../types";
 import { SELECT } from "../reglages/elements";
+import { Erreur } from "../champ";
 
 const FOCUS = "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-ring";
 /** Gros sélecteur de 64 px (charte) : choix actif en cuir. */
@@ -33,18 +35,27 @@ const choix = (actif: boolean) => cn(
  * Cliente du ticket : recherche sans accents dans toutes les clientes, par
  * nom ou par numéro de carte (mini CRM § 5) ; un lecteur de cartes en mode
  * clavier tape le numéro puis Entrée : la cliente est choisie. « Sans
- * cliente » pour une vente de produits.
+ * cliente » pour une vente de produits. « Nouvelle cliente » (gérante,
+ * réception) crée la fiche sur place, nom seul ou avec le téléphone, et la
+ * choisit : une cliente de passage peut recevoir une prestation.
  */
-export function ChoixCliente({ clients, current, onDone, onClose }: {
+export function ChoixCliente({ clients, current, onDone, onClose, onCreate }: {
   clients: ClientLookup[];
   current: number | null;
   onDone: (clientId: number | null) => void;
   onClose: () => void;
+  /** Crée la cliente et rend son identifiant ; absent, pas de création depuis la caisse. */
+  onCreate?: (data: { name: string; phone: string }) => Promise<number>;
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
   const found = clients.filter((c) => matchesSearch(search, c.name) || cardMatches(search, c.card)).slice(0, 40);
   const exact = cardChoice(search, clients);
+  if (creating && onCreate) {
+    // Nom repris de la recherche quand elle contient une lettre (un numéro de carte n'est pas un nom).
+    return <NouvelleCliente initialName={/\p{L}/u.test(search) ? search.trim() : ""} onCreate={onCreate} onDone={onDone} onBack={() => setCreating(false)} onClose={onClose} />;
+  }
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="md:max-w-md">
@@ -76,6 +87,67 @@ export function ChoixCliente({ clients, current, onDone, onClose }: {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("commun.annuler")}</Button>
           <Button variant="outline" onClick={() => onDone(null)}>{t("caisse.sans_cliente")}</Button>
+          {onCreate && <Button onClick={() => setCreating(true)}>{t("caisse.nouvelle_cliente")}</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Numéro d'exemple au format du Cameroun (sans lettre : identique dans les deux langues). */
+const PHONE_EXAMPLE = "+237 6 77 12 34 56";
+
+/**
+ * Nouvelle cliente depuis la caisse : nom obligatoire, téléphone facultatif ;
+ * le reste de la fiche se complète plus tard. Créée, elle est choisie pour le ticket.
+ */
+function NouvelleCliente({ initialName, onCreate, onDone, onBack, onClose }: {
+  initialName: string;
+  onCreate: (data: { name: string; phone: string }) => Promise<number>;
+  onDone: (clientId: number) => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    const problem = nameProblem(name);
+    if (problem) { setError(t(problem)); return; }
+    setError(null);
+    setSaving(true);
+    try {
+      onDone(await onCreate({ name: name.trim(), phone: phone.trim() }));
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
+  };
+  // Entrée dans un champ : même effet que « Créer et choisir », jamais deux envois.
+  const onEnter = (e: KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); if (!saving) void submit(); } };
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="md:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("caisse.nouvelle_cliente")}</DialogTitle>
+          <DialogDescription>{t("caisse.nouvelle_cliente_aide")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="caisse-nom-cliente">{t("commun.nom_obligatoire")}</Label>
+            <Input id="caisse-nom-cliente" autoComplete="off" value={name} onInput={(e: Event) => setName((e.currentTarget as HTMLInputElement).value)} onKeyDown={onEnter} placeholder={t("commun.nom_complet")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="caisse-tel-cliente">{t("caisse.telephone_facultatif")}</Label>
+            <Input id="caisse-tel-cliente" type="tel" inputMode="tel" autoComplete="off" value={phone} onInput={(e: Event) => setPhone((e.currentTarget as HTMLInputElement).value)} onKeyDown={onEnter} placeholder={PHONE_EXAMPLE} />
+          </div>
+          <Erreur message={error} />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onBack}>{t("caisse.retour_liste")}</Button>
+          <Button disabled={saving} onClick={() => void submit()}>{t("caisse.creer_et_choisir")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -61,7 +61,7 @@ export interface AppContextValue {
   setClientsPage: (page: number) => void;
   clientsSearch: string;
   setClientsSearch: (s: string) => void;
-  addClient: (data: Partial<Client>) => Promise<void>;
+  addClient: (data: Partial<Client>) => Promise<Client>;
   updateClient: (id: number, data: Partial<Client>) => Promise<void>;
   deleteClient: (id: number) => Promise<void>;
   selectedClient: Client | null;

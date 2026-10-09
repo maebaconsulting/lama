@@ -299,3 +299,14 @@ test("acompte d'une autre cliente : phrase du serveur, vente bloquée, rien de d
   assert.match(ticket, /const blocked = lines\.length === 0 \|\| missingClient \|\| lines\.some\(\(l\) => l\.missing\) \|\| depositExceeds \|\| depositOtherClient;/);
   assert.match(ticket, /\{deposit && !depositOtherClient && <Total libelle=\{t\("caisse\.acompte_deduit", \{ numero: deposit\.number \}\)\}/);
 });
+
+test("« Nouvelle cliente » depuis la caisse : gérante et réception seulement, nom obligatoire, téléphone facultatif, fiche créée puis choisie", () => {
+  assert.match(ticket, /onCreate=\{canSell\(account\.role\) \? async \(data\) => \(await addClient\(data\)\)\.id : undefined\}/, "la praticienne ne crée pas de cliente (droits du serveur)");
+  assert.match(fenetres, /\{onCreate && <Button onClick=\{\(\) => setCreating\(true\)\}>\{t\("caisse\.nouvelle_cliente"\)\}<\/Button>\}/);
+  assert.match(fenetres, /const problem = nameProblem\(name\);/);
+  assert.match(fenetres, /onDone\(await onCreate\(\{ name: name\.trim\(\), phone: phone\.trim\(\) \}\)\);/);
+  assert.match(fenetres, /initialName=\{\/\\p\{L\}\/u\.test\(search\) \? search\.trim\(\) : ""\}/, "nom repris de la recherche, jamais un numéro de carte");
+  assert.match(fenetres, /<Button disabled=\{saving\} onClick=\{\(\) => void submit\(\)\}>/, "un seul envoi à la fois");
+  assert.match(fenetres, /if \(e\.key === "Enter"\) \{ e\.preventDefault\(\); if \(!saving\) void submit\(\); \}/);
+  assert.match(read("../../hooks/use-app.ts"), /const \{ client \} = await api<\{ client: Client \}>\("POST", "\/api\/clients", data\);[\s\S]*?return client;/);
+});

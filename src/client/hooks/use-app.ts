@@ -362,9 +362,10 @@ export function useAppState(
   }, []);
 
   const addClient = useCallback(async (data: Partial<Client>) => {
-    await api("POST", "/api/clients", data);
+    const { client } = await api<{ client: Client }>("POST", "/api/clients", data);
     await Promise.all([fetchClients(clientsPag, clientsSearch, tagQuery), fetchClientTags()]);
     await Promise.all([fetchStats(), fetchLookups()]);
+    return client;
   }, [clientsPag, clientsSearch, tagQuery, fetchClients, fetchClientTags, fetchStats, fetchLookups]);
 
   const updateClient = useCallback(async (id: number, data: Partial<Client>) => {
