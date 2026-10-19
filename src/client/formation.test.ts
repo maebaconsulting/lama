@@ -12,7 +12,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 test("rubrique Formation : administrateur de la base de formation seulement, après « Heure » ; jamais dans la vraie base", () => {
   const ids = (role: Parameters<typeof sectionsFor>[0], formation?: boolean) => sectionsFor(role, formation).map((s) => s.id);
   assert.ok(!ids("admin").includes("formation"), "vraie base : aucune rubrique Formation");
-  assert.deepEqual(ids("admin", true), ["caisse", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "formation", "connexions", "journal", "mon-compte"]);
+  assert.deepEqual(ids("admin", true), ["caisse", "en-ligne", "import", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "formation", "connexions", "journal", "mon-compte"]);
   for (const role of ["manager", "reception", "practitioner"] as const) assert.ok(!ids(role, true).includes("formation"), role);
   assert.equal(forbiddenSection("admin", "formation"), true);
   assert.equal(forbiddenSection("admin", "formation", true), false);

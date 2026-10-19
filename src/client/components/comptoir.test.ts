@@ -47,8 +47,8 @@ test("retouche 2 : Montant garde le nombre et « F » ensemble, dans un seul blo
   assert.match(montant, /splitAmount\(valeur\)/, "Montant doit s'appuyer sur splitAmount");
   assert.match(
     montant,
-    /<span className="whitespace-nowrap">\{parts\[0\]\}\{"\\u00a0"\}\{parts\[1\]\}<\/span>/,
-    "le nombre et la devise vont dans un même bloc insécable, joints par une espace insécable",
+    /<span className="whitespace-nowrap">\{parts\.avant && <>\{parts\.avant\}\{"\\u00a0"\}<\/>\}\{parts\.nombre\}\{parts\.apres && <>\{"\\u00a0"\}\{parts\.apres\}<\/>\}<\/span>/,
+    "symbole, nombre et devise dans un même bloc insécable, joints par une espace insécable",
   );
   assert.doesNotMatch(montant, /<\/span> <span/, "plus d'espace cassable entre le nombre et la devise");
 });

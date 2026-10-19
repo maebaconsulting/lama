@@ -34,7 +34,7 @@ test("caisse du jour puis clôture : écart, journal, ticket PDF ; réception ou
   assert.deepEqual([empty.status, empty.body.error], [409, "Rien n'a été encaissé depuis la dernière clôture de ce jour."]);
 
   const journal = ctx.db.prepare("SELECT action, target FROM audit_log WHERE action = 'caisse.cloture'").all().map((row) => ({ ...row }));
-  assert.deepEqual(journal, [{ action: "caisse.cloture", target: "2026-09-28 n°\u00a01 (\u22121\u202f000\u00a0F)" }]);
+  assert.deepEqual(journal, [{ action: "caisse.cloture", target: "2026-09-28 n°\u00a01 (\u22121\u202f000\u00a0FCFA)" }]);
   assert.equal(auditAction("caisse.cloture", "fr"), "Caisse clôturée");
   assert.equal(auditAction("caisse.cloture", "en"), "Till closed");
   assert.equal(resourceFor("/api/cash/closings"), "invoices");

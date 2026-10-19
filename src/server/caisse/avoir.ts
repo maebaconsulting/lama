@@ -7,8 +7,8 @@
  * appelées dans `StorageBinding.transaction` : toute erreur annule tout.
  */
 import type { Database } from "../storage.ts";
-import { coded, type MessageKey } from "../messages.ts";
-import { PAYMENT_METHODS, REFERENCE_REQUIRED, SERIES, creditTotals, documentNumber, formatFrancs, yearAt, type PaymentMethod } from "../../shared/caisse.ts";
+import { coded, montant, type MessageKey } from "../messages.ts";
+import { PAYMENT_METHODS, REFERENCE_REQUIRED, SERIES, creditTotals, documentNumber, yearAt, type PaymentMethod } from "../../shared/caisse.ts";
 import { checkClock, SaleError, takeNumber } from "./vente.ts";
 import { recordCreditLoyalty } from "../crm/fidelite.ts";
 
@@ -66,13 +66,16 @@ const one = (db: Database, sql: string, ...params: (string | number | null)[]) =
 
 export interface CreditStateLine {
   id: number;
-  kind: "service" | "product";
-  ref_id: number;
+  kind: "service" | "product" | "libre";
+  /** Article du catalogue ; `null` pour un supplément libre. */
+  ref_id: number | null;
   label_fr: string;
   label_en: string;
   quantity: number;
   unit_price: number;
   staff_id: number | null;
+  /** Ligne de la prestation dont cette ligne est un supplément (spec du 18/10/2026 § 3.5). */
+  parent_line_id: number | null;
   /** Quantité déjà reprise par des avoirs. */
   credited: number;
 }
@@ -89,12 +92,13 @@ export function creditState(db: Database, invoiceId: number): CreditState | null
   const invoice = one(db, "SELECT * FROM invoices WHERE id = ?", invoiceId);
   if (!invoice) return null;
   const lines = (db.prepare(
-    `SELECT l.id, l.kind, l.ref_id, l.label_fr, l.label_en, l.quantity, l.unit_price, l.staff_id,
+    `SELECT l.id, l.kind, l.ref_id, l.label_fr, l.label_en, l.quantity, l.unit_price, l.staff_id, l.parent_line_id,
             COALESCE((SELECT SUM(x.quantity) FROM invoice_lines x WHERE x.credited_line_id = l.id), 0) AS credited
        FROM invoice_lines l WHERE l.invoice_id = ? ORDER BY l.id`,
   ).all(invoiceId) as Row[]).map((l): CreditStateLine => ({
-    id: Number(l.id), kind: l.kind as CreditStateLine["kind"], ref_id: Number(l.ref_id), label_fr: String(l.label_fr), label_en: String(l.label_en ?? ""),
-    quantity: Number(l.quantity), unit_price: Number(l.unit_price), staff_id: l.staff_id === null ? null : Number(l.staff_id), credited: Number(l.credited),
+    id: Number(l.id), kind: l.kind as CreditStateLine["kind"], ref_id: l.ref_id === null ? null : Number(l.ref_id), label_fr: String(l.label_fr), label_en: String(l.label_en ?? ""),
+    quantity: Number(l.quantity), unit_price: Number(l.unit_price), staff_id: l.staff_id === null ? null : Number(l.staff_id),
+    parent_line_id: l.parent_line_id === null ? null : Number(l.parent_line_id), credited: Number(l.credited),
   }));
   const credited = one(db, "SELECT COALESCE(SUM(total_ttc), 0) AS total FROM invoices WHERE credited_invoice_id = ?", invoiceId);
   return {
@@ -158,7 +162,7 @@ export function issueCreditNote(db: Database, req: CreditRequest, ctx: CreditCon
   }
   const refunded = req.refunds.reduce((sum, r) => sum + r.amount, 0);
   if (refunded !== totals.total_ttc) {
-    throw new SaleError(409, "avoir.remboursement", { rembourse: formatFrancs(refunded), du: formatFrancs(totals.total_ttc) }, { code: "total", due: totals.total_ttc });
+    throw new SaleError(409, "avoir.remboursement", { rembourse: montant(refunded), du: montant(totals.total_ttc) }, { code: "total", due: totals.total_ttc });
   }
 
   const series = SERIES.credit_note;
@@ -181,13 +185,18 @@ export function issueCreditNote(db: Database, req: CreditRequest, ctx: CreditCon
   const id = Number(note.lastInsertRowid);
 
   const addLine = db.prepare(
-    `INSERT INTO invoice_lines (invoice_id, kind, ref_id, label_fr, label_en, quantity, unit_price, line_total, staff_id, credited_line_id, restock)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO invoice_lines (invoice_id, kind, ref_id, label_fr, label_en, quantity, unit_price, line_total, staff_id, credited_line_id, restock, parent_line_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const giveBack = db.prepare("UPDATE products SET stock = stock + ?, updated_at = datetime('now') WHERE id = ?");
-  for (const c of chosen) {
+  // Supplément repris avec sa prestation (spec § 3.5) : rattaché à la ligne de cet avoir qui reprend sa prestation
+  // d'origine ; repris sans elle, aucun rattachement. Ordre de la facture : la prestation est écrite avant ses suppléments.
+  const written = new Map<number, number>();
+  for (const c of [...chosen].sort((a, b) => a.line.id - b.line.id)) {
     const l = c.line;
-    addLine.run(id, l.kind, l.ref_id, l.label_fr, l.label_en, c.quantity, l.unit_price, l.unit_price * c.quantity, l.staff_id, l.id, c.restock ? 1 : 0);
+    const parent = l.parent_line_id === null ? null : written.get(l.parent_line_id) ?? null;
+    const row = addLine.run(id, l.kind, l.ref_id, l.label_fr, l.label_en, c.quantity, l.unit_price, l.unit_price * c.quantity, l.staff_id, l.id, c.restock ? 1 : 0, parent);
+    written.set(l.id, Number(row.lastInsertRowid));
     if (c.restock && Number(giveBack.run(c.quantity, l.ref_id).changes) === 0) {
       throw new SaleError(409, "avoir.produit_supprime", { produit: label(l) });
     }

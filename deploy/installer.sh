@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Installe lama sur un mini-PC Ubuntu Server 24.04 neuf, ou le réinstalle
+# Installe lama sur un mini-PC Ubuntu 24.04 ou 26.04 neuf (Server ou bureau), ou le réinstalle
 # sans toucher aux données ni aux clés déjà présentes.
 # À lancer en root depuis le dossier extrait de l'archive, avec sudo ./deploy/installer.sh
+# Deux modes, au choix au lancement ou par option : --auto (réglages par défaut,
+# aucune question) ou --assiste (une question à chaque choix).
 set -euo pipefail
 
 # Messages dans la langue de LANG ou de LAMA_LANGUE (msg "texte" "text").
@@ -125,12 +127,71 @@ afficher_cles() {
 FIN
 }
 
+# Mode de l'installation, affiché sur la sortie standard : « auto » (réglages
+# par défaut, aucune question) ou « assiste » (une question à chaque choix).
+# Pris de l'option --auto ou --assiste (--assisted en anglais), sinon demandé
+# par un menu sur la sortie d'erreur, réponse lue sur l'entrée standard (Entrée
+# seule ou entrée fermée : automatique). Option inconnue : motif et retour 1.
+# Fonction isolée pour être testée seule (src/server/deploy.test.ts).
+choisir_mode() {
+  local REPONSE
+  case "${1:-}" in
+    --auto) printf 'auto'; return 0 ;;
+    --assiste|--assisted) printf 'assiste'; return 0 ;;
+    "") ;;
+    *) printf '%s\n' "$(msg "Option inconnue : $1 (attendu : --auto ou --assiste)." "Unknown option: $1 (expected: --auto or --assisted).")" >&2; return 1 ;;
+  esac
+  printf '\n%s\n  1. %s\n  2. %s\n' "$(msg "Mode d'installation" "Installation mode")" \
+    "$(msg "Automatique : réglages par défaut, aucune question" "Automatic: default settings, no questions")" \
+    "$(msg "Assistée : une question à chaque choix" "Assisted: one question for each choice")" >&2
+  while true; do
+    printf '%s' "$(msg "Votre choix, 1 ou 2 [1] : " "Your choice, 1 or 2 [1]: ")" >&2
+    read -r REPONSE || REPONSE=""
+    case "$REPONSE" in
+      ""|1) printf 'auto'; return 0 ;;
+      2) printf 'assiste'; return 0 ;;
+    esac
+  done
+}
+
+# Question oui ou non. En mode assisté (MODE=assiste), la pose sur la sortie
+# d'erreur et lit la réponse ; Entrée seule ou entrée fermée donnent la réponse
+# par défaut. En mode automatique, rend la réponse par défaut sans rien
+# demander. demander "question" o|n ; retourne 0 pour oui, 1 pour non.
+# Fonction isolée pour être testée seule (src/server/deploy.test.ts).
+demander() {
+  local QUESTION="$1" DEFAUT="$2" REPONSE INVITE
+  if [ "${MODE:-auto}" != "assiste" ]; then
+    [ "$DEFAUT" = o ]
+    return
+  fi
+  if [ "$DEFAUT" = o ]; then INVITE="$(msg "[O/n]" "[Y/n]")"; else INVITE="$(msg "[o/N]" "[y/N]")"; fi
+  while true; do
+    printf '%s %s ' "$QUESTION" "$INVITE" >&2
+    read -r REPONSE || REPONSE=""
+    case "$REPONSE" in
+      "") [ "$DEFAUT" = o ]; return ;;
+      o|O|oui|Oui|OUI|y|Y|yes|Yes|YES) return 0 ;;
+      n|N|non|Non|NON|no|No|NO) return 1 ;;
+    esac
+  done
+}
+
+# Texte libre en mode assisté, affiché sur la sortie standard ; Entrée seule ou
+# entrée fermée donnent la valeur par défaut. demander_texte "question" défaut
+demander_texte() {
+  local QUESTION="$1" DEFAUT="$2" REPONSE
+  printf '%s [%s]%s ' "$QUESTION" "$DEFAUT" "$(msg " :" ":")" >&2
+  read -r REPONSE || REPONSE=""
+  printf '%s' "${REPONSE:-$DEFAUT}"
+}
+
 # Chargé par « source » (tests de poser_temoin), le script s'arrête ici,
 # avant toute vérification ou action.
 [ "${BASH_SOURCE:-$0}" = "$0" ] || return 0
 
 [ "$(id -u)" -eq 0 ] || echec "$(msg "Lancez ce script avec sudo." "Run this script with sudo.")"
-grep -q '^VERSION_ID="24.04"' /etc/os-release || echec "$(msg "Ce script attend Ubuntu Server 24.04." "This script expects Ubuntu Server 24.04.")"
+grep -q -E '^VERSION_ID="(24|26)\.04"' /etc/os-release || echec "$(msg "Ce script attend Ubuntu 24.04 ou 26.04." "This script expects Ubuntu 24.04 or 26.04.")"
 [ -f "$SOURCE/VERSION" ] && [ -f "$SOURCE/dist-server/main.mjs" ] || echec "$(msg "Archive incomplète, lancez le script depuis le dossier extrait." "Incomplete archive, run the script from the extracted folder.")"
 VERSION="$(cat "$SOURCE/VERSION")"
 [[ "$VERSION" =~ ^[0-9]{8}-[0-9]{4}-[0-9a-f]+$ ]] || echec "$(msg "VERSION invalide dans l'archive, refabriquez le paquet avec pnpm paquet." "Invalid VERSION in the archive, rebuild the package with pnpm paquet.")"
@@ -147,6 +208,41 @@ if [ "${LAMA_ESSAI_SANS_TERMINAL:-0}" != "1" ]; then
   # LAMA_ESSAI_SANS_TERMINAL=1 lève cette vérification : réservé aux essais
   # automatisés en machine virtuelle (tâche 15), jamais à une installation réelle.
   [ -t 0 ] && [ -t 1 ] || echec "$(msg "Lancez l'installation dans un terminal, les clés s'affichent à l'écran une seule fois." "Run the installation in a terminal, the keys are shown on screen only once.")"
+fi
+
+# Essai automatisé sans terminal ni option : mode automatique, sans menu.
+if [ -z "${1:-}" ] && [ "${LAMA_ESSAI_SANS_TERMINAL:-0}" = "1" ]; then
+  MODE=auto
+else
+  MODE="$(choisir_mode "${1:-}")" || exit 1
+fi
+FUSEAU=Africa/Douala
+if [ "$MODE" = "assiste" ]; then
+  echo
+  if demander "$(msg "Langue des messages : français. Passer en anglais ?" "Language of the messages: English. Switch to French?")" n; then
+    if [ "$LANGUE" = "en" ]; then LANGUE=fr; else LANGUE=en; fi
+    MOT_OUI="$(msg "OUI" "YES")"
+    MOT_EFFACER="$(msg "EFFACER" "ERASE")"
+  fi
+  # Les scripts lancés plus bas (disque, formation, Google Drive) parlent la même langue.
+  export LAMA_LANGUE="$LANGUE"
+  until FUSEAU="$(demander_texte "$(msg "Fuseau horaire de l'institut" "Time zone of the institute")" "$FUSEAU")" \
+    && [[ "$FUSEAU" =~ ^[A-Za-z_]+(/[A-Za-z0-9_+-]+)+$ ]] && [ -f "/usr/share/zoneinfo/$FUSEAU" ]; do
+    echo "$(msg "Fuseau inconnu, par exemple Africa/Douala, Africa/Abidjan, Europe/Paris." "Unknown time zone, for example Africa/Douala, Africa/Abidjan, Europe/Paris.")"
+    FUSEAU=Africa/Douala
+  done
+  # L'heure doit être juste avant tout le reste : paquets, certificat, factures.
+  timedatectl set-timezone "$FUSEAU"
+  if ! demander "$(msg "Le serveur indique $(date '+%d/%m/%Y %H:%M'). Est-ce l'heure exacte ?" "The server shows $(date '+%Y-%m-%d %H:%M'). Is this the exact time?")" o; then
+    until HEURE="$(demander_texte "$(msg "Heure exacte, AAAA-MM-JJ HH:MM" "Exact time, YYYY-MM-DD HH:MM")" "$(date '+%Y-%m-%d %H:%M')")" \
+      && [[ "$HEURE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] && date -d "$HEURE" >/dev/null 2>&1; do
+      echo "$(msg "Format attendu : 2026-10-19 14:30" "Expected format: 2026-10-19 14:30")"
+    done
+    # La synchronisation automatique empêche tout réglage à la main ; l'étape HTTPS et heure la rallume.
+    timedatectl set-ntp false 2>/dev/null || true
+    timedatectl set-time "$HEURE:00" || echec "$(msg "L'heure n'a pas pu être réglée." "The time could not be set.")"
+    echo "$(msg "Heure réglée : $(date '+%d/%m/%Y %H:%M')." "Time set: $(date '+%Y-%m-%d %H:%M').")"
+  fi
 fi
 
 etape "$(msg "Paquets du système" "System packages")"
@@ -200,10 +296,17 @@ fi
 [ -f "$CONF/master.key" ] && chown "$COMPTE:$COMPTE" "$CONF/master.key" && chmod 0600 "$CONF/master.key"
 
 etape "$(msg "Fuseau horaire et nom sur le réseau" "Time zone and network name")"
-timedatectl set-timezone Africa/Douala
+timedatectl set-timezone "$FUSEAU"
 hostnamectl set-hostname "$NOM_RESEAU"
 grep -q "^127\.0\.1\.1 $NOM_RESEAU\$" /etc/hosts || printf '127.0.1.1 %s\n' "$NOM_RESEAU" >> /etc/hosts
 systemctl enable --now avahi-daemon
+# Ubuntu bureau se met en veille seul après quelques minutes sans clavier ni souris :
+# le serveur deviendrait injoignable. Veille et hibernation sont coupées pour de bon.
+if [ "$(systemctl get-default)" = "graphical.target" ] \
+  && demander "$(msg "Ubuntu bureau$ : couper la mise en veille pour que le serveur reste joignable$ ?" "Ubuntu desktop: turn sleep off so the server stays reachable?")" o; then
+  systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null
+  echo "$(msg "Ubuntu bureau : mise en veille coupée, le serveur reste joignable." "Ubuntu desktop: sleep turned off, the server stays reachable.")"
+fi
 
 etape "$(msg "Programme, version $VERSION" "Program, version $VERSION")"
 # Créé par le compte du service lui-même : $DATA lui appartient, et un lien
@@ -228,6 +331,23 @@ grep -q '^LABEL=LAMA-SAUVEGARDE ' /etc/fstab || printf '%s\n' "$LIGNE_FSTAB" >> 
 systemctl daemon-reload
 AUTOMOUNT="$(systemd-escape --path --suffix=automount "$USB")"
 systemctl restart "$AUTOMOUNT" || true
+# Mode assisté : un disque USB neuf peut être préparé ici (preparer-disque.sh
+# refuse le disque du système et demande EFFACER avant d'effacer quoi que ce soit).
+if [ "$MODE" = "assiste" ] && ! blkid -L LAMA-SAUVEGARDE >/dev/null 2>&1; then
+  DISQUES_USB="$(lsblk -d -n -o NAME,TRAN,SIZE,MODEL 2>/dev/null | awk '$2 == "usb"' || true)"
+  if [ -n "$DISQUES_USB" ]; then
+    echo "$(msg "Disques USB branchés$ :" "USB drives plugged in:")"
+    printf '%s\n' "$DISQUES_USB" | sed 's/^/  /'
+    if demander "$(msg "Préparer l'un d'eux pour les sauvegardes$ ? Tout son contenu sera effacé." "Prepare one of them for backups? Everything on it will be erased.")" n; then
+      NOM_DISQUE="$(demander_texte "$(msg "Nom du disque, par exemple sdb" "Drive name, for example sdb")" "$(printf '%s\n' "$DISQUES_USB" | awk 'NR == 1 { print $1 }')")"
+      if printf '%s\n' "$DISQUES_USB" | awk '{ print $1 }' | grep -xF -- "${NOM_DISQUE#/dev/}" >/dev/null; then
+        "$APP/actuelle/deploy/preparer-disque.sh" "/dev/${NOM_DISQUE#/dev/}" || echo "$(msg "Le disque n'a pas été préparé, l'installation continue sans lui." "The drive was not prepared, the installation goes on without it.")"
+      else
+        echo "$(msg "Ce disque n'est pas dans la liste, rien n'a été effacé." "This drive is not in the list, nothing was erased.")"
+      fi
+    fi
+  fi
+fi
 DISQUE_PRET=0
 if blkid -L LAMA-SAUVEGARDE >/dev/null 2>&1; then
   ls "$USB" >/dev/null 2>&1 || true
@@ -259,11 +379,25 @@ curl -fsS --max-time 5 http://127.0.0.1/certificat >/dev/null 2>&1 || echec "$(m
 etape "$(msg "WhatsApp (passerelle WAHA)" "WhatsApp (WAHA gateway)")"
 # Après la vérification : la base est créée et migrée, la clé peut y être
 # inscrite. Un échec ici laisse lama en service, sans envoi WhatsApp.
-installer_waha "$APP/actuelle" "$CONF" "$COMPTE" || echo "$(msg "WhatsApp n'est pas installé, lama fonctionne sans. Relancez sudo ./deploy/installer.sh une fois le problème réglé." "WhatsApp is not installed, lama works without it. Run sudo ./deploy/installer.sh again once the problem is fixed.")"
+if demander "$(msg "Installer la passerelle WhatsApp (Docker et WAHA)$ ?" "Install the WhatsApp gateway (Docker and WAHA)?")" o; then
+  installer_waha "$APP/actuelle" "$CONF" "$COMPTE" || echo "$(msg "WhatsApp n'est pas installé, lama fonctionne sans. Relancez sudo ./deploy/installer.sh une fois le problème réglé." "WhatsApp is not installed, lama works without it. Run sudo ./deploy/installer.sh again once the problem is fixed.")"
+else
+  echo "$(msg "WhatsApp laissé de côté, lama fonctionne sans. Pour l'ajouter plus tard, relancez sudo ./deploy/installer.sh." "WhatsApp left out, lama works without it. To add it later, run sudo ./deploy/installer.sh again.")"
+fi
+
+FORMATION=0
+if demander "$(msg "Installer la base de formation (port 8443)$ ?" "Install the training database (port 8443)?")" n; then
+  etape "$(msg "Base de formation" "Training database")"
+  "$APP/actuelle/deploy/lama-formation.sh" --installer && FORMATION=1 || echo "$(msg "La base de formation n'est pas installée. Plus tard$ : sudo $APP/actuelle/deploy/lama-formation.sh --installer" "The training database is not installed. Later: sudo $APP/actuelle/deploy/lama-formation.sh --installer")"
+fi
+if demander "$(msg "Relier Google Drive aux sauvegardes maintenant$ ?" "Connect Google Drive to the backups now?")" n; then
+  etape "$(msg "Google Drive" "Google Drive")"
+  "$APP/actuelle/deploy/configurer-drive.sh" || echo "$(msg "Google Drive n'est pas relié. Plus tard$ : sudo $APP/actuelle/deploy/configurer-drive.sh" "Google Drive is not connected. Later: sudo $APP/actuelle/deploy/configurer-drive.sh")"
+fi
 
 echo
 echo "$(msg "lama est installé, version $VERSION." "lama is installed, version $VERSION.")"
 echo "$(msg "Sur chaque appareil du Wi-Fi de l'institut, ouvrez d'abord http://$NOM_RESEAU.local/certificat et approuvez le certificat, puis ouvrez https://$NOM_RESEAU.local (la première fois, pour créer le compte administrateur)." "On each device on the institute's Wi-Fi, first open http://$NOM_RESEAU.local/certificat and approve the certificate, then open https://$NOM_RESEAU.local (the first time, to create the administrator account).")"
 "$APP/actuelle/deploy/lama-certificat.sh" --etat || true
 [ "$DISQUE_PRET" = 1 ] || echo "$(msg "Rappel, le disque de sauvegarde USB reste à préparer." "Reminder, the USB backup drive still has to be prepared.")"
-echo "$(msg "Base de formation, facultative, sur le port 8443, sudo $APP/actuelle/deploy/lama-formation.sh --installer" "Training database, optional, on port 8443, sudo $APP/actuelle/deploy/lama-formation.sh --installer")"
+[ "$FORMATION" = 1 ] || echo "$(msg "Base de formation, facultative, sur le port 8443, sudo $APP/actuelle/deploy/lama-formation.sh --installer" "Training database, optional, on port 8443, sudo $APP/actuelle/deploy/lama-formation.sh --installer")"

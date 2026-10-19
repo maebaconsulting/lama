@@ -16,6 +16,8 @@ source "$ICI/installer.sh"
 
 APP=/opt/lama
 COMPTE_FORMATION=lama-formation
+# Compte de la vraie base, seul à pouvoir lire /var/lib/lama (0700).
+COMPTE_LAMA=lama
 # Numéro fixe, voisin de celui du compte lama (871), pour les mêmes raisons (installer.sh).
 UID_FORMATION=872
 DATA_FORMATION=/var/lib/lama-formation
@@ -29,6 +31,11 @@ LOGINS="formation.admin, formation.gerante, formation.reception, formation.prati
 # ceux de l'environnement de l'appelant), depuis un dossier qu'il peut lire. umask 077 : runuser
 # garde le masque de root (0022), la base et le fichier de demande seraient lisibles de tous.
 comme_formation() { ( umask 077; cd / && runuser -u "$COMPTE_FORMATION" -- env LAMA_FORMATION=1 LAMA_DATA_DIR="$DATA_FORMATION" LAMA_CONFIG_DIR="$CONF_FORMATION" HOME="$DATA_FORMATION" "$@" ); }
+
+# Devise de la vraie base (institut.devise, position et affichage du symbole), lue par « cli lire-devise »
+# sous le compte de lama, en lecture seule, sur ses dossiers : options de « cli formation-comptes », une
+# par ligne. La formation n'a toujours aucun droit sur /var/lib/lama.
+lire_devise_vraie_base() { ( cd / && runuser -u "$COMPTE_LAMA" -- env -u LAMA_FORMATION -u LAMA_DEMO_PUBLIQUE LAMA_DATA_DIR=/var/lib/lama LAMA_CONFIG_DIR=/etc/lama HOME=/var/lib/lama /usr/bin/node "$APP/actuelle/dist-server/cli.mjs" lire-devise ); }
 
 # Demande un mot de passe sans écho, deux fois, 10 caractères au moins (comptés en caractères,
 # non en octets), et l'écrit sur la sortie standard (lue par l'appelant) ; questions et refus
@@ -59,14 +66,20 @@ demander_mot_de_passe() {
 # Demande les quatre mots de passe (administration, gérante, réception, praticienne) et les
 # passe à « cli formation-comptes » par l'entrée standard, jamais en argument : ils ne
 # figurent ni dans la liste des processus ni dans aucun journal. Crée les comptes, ou change
-# leurs mots de passe et les débloque ; la première fois, la base et sa démonstration avec.
+# leurs mots de passe et les débloque ; la première fois, la base et sa démonstration avec, dans la
+# devise de la vraie base, lue d'abord et passée en options.
 ecrire_comptes() {
-  local P1 P2 P3 P4
+  local P1 P2 P3 P4 LUES LIGNE
+  local OPTIONS=()
+  LUES="$(lire_devise_vraie_base)" || { echo "$(msg "La devise de la vraie base n'a pas pu être lue." "The currency of the real database could not be read.")" >&2; return 1; }
+  while IFS= read -r LIGNE; do
+    if [ -n "$LIGNE" ]; then OPTIONS+=("$LIGNE"); fi
+  done <<< "$LUES"
   P1="$(demander_mot_de_passe "$(msg "administration" "administration")")" || return 1
   P2="$(demander_mot_de_passe "$(msg "gérante" "manager")")" || return 1
   P3="$(demander_mot_de_passe "$(msg "réception" "reception")")" || return 1
   P4="$(demander_mot_de_passe "$(msg "praticienne" "practitioner")")" || return 1
-  printf '%s\n%s\n%s\n%s\n' "$P1" "$P2" "$P3" "$P4" | comme_formation /usr/bin/node "$APP/actuelle/dist-server/cli.mjs" formation-comptes
+  printf '%s\n%s\n%s\n%s\n' "$P1" "$P2" "$P3" "$P4" | comme_formation /usr/bin/node "$APP/actuelle/dist-server/cli.mjs" formation-comptes ${OPTIONS[@]+"${OPTIONS[@]}"}
 }
 
 # Vrai dès que la base de formation répond en https sur le port 8443, avec l'autorité de l'institut.

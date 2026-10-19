@@ -7,7 +7,7 @@ import { translate, type Key } from "../i18n/translate.ts";
 
 export type WhatsappState = "connecte" | "qr" | "demarrage" | "deconnecte" | "injoignable" | "erreur";
 export interface WhatsappStatus { provider: "aucun" | "waha"; state?: WhatsappState; phone?: string }
-export type MessageType = "confirmation" | "rappel" | "ticket" | "libre" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert";
+export type MessageType = "confirmation" | "rappel" | "ticket" | "libre" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert" | "en_ligne";
 
 /** Document joint à un message (vague 2) : facture (ticket), avoir, reçu d'acompte. */
 export type DocumentKind = "invoice" | "credit" | "deposit";
@@ -54,7 +54,7 @@ export function smsLink(to: string, text: string): string {
 }
 
 /** Texte d'un message modifiable par la gérante (`GET /api/whatsapp/texts`). */
-export interface WhatsappText { key: string; kind: "confirmation" | "rappel" | "ticket" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert"; lang: Lang; value: string; default: string }
+export interface WhatsappText { key: string; kind: "confirmation" | "rappel" | "ticket" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert" | "en_ligne_confirmation" | "en_ligne_autre_horaire" | "en_ligne_refus" | "en_ligne_rappel"; lang: Lang; value: string; default: string }
 
 /** Lien du secours un clic : WhatsApp s'ouvre sur la conversation, message prérempli ; sans numéro, choix du contact. */
 export function waLink(to: string, text: string): string {
@@ -106,6 +106,7 @@ const TYPE_KEYS: Record<MessageType, Key> = {
   absence: "a_envoyer.type.absence",
   campagne: "a_envoyer.type.campagne",
   transfert: "a_envoyer.type.transfert",
+  en_ligne: "a_envoyer.type.en_ligne",
 };
 
 export function manualTypeLabel(type: MessageType, lang: Lang): string {

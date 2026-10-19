@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseWhole, parseWholeAmount, pointsText } from "./fidelite.ts";
 import { addTier, examplePoints, fideliteChanges, fideliteForm, removeTier, setTier } from "./reglages-fidelite.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
 import { auditTarget } from "./libelles.ts";
 import { parseRoute, pathFor } from "./routes.ts";
 import { forbiddenSection, sectionsFor } from "./roles.ts";
@@ -33,10 +34,10 @@ test("changements : seulement ce qui change ; premier champ fautif ; paliers con
   assert.deepEqual(fideliteChanges(base, base), { changes: [] });
   assert.deepEqual(fideliteChanges(base, { ...base, tranche: "1 000" }), { changes: [] }, "même valeur retapée");
   assert.deepEqual(fideliteChanges(base, { ...base, active: true, points: "2" }), { changes: [{ key: "fidelite.active", value: true }, { key: "fidelite.points", value: 2 }] });
-  assert.deepEqual(fideliteChanges(base, { ...base, tranche: "99" }), { error: "reglages_fidelite.erreur_tranche", field: "tranche" });
+  assert.deepEqual(fideliteChanges(base, { ...base, tranche: "99" }), { error: "reglages_fidelite.erreur_tranche", field: "tranche", values: { min: 100, max: 1_000_000 } });
   assert.deepEqual(fideliteChanges(base, { ...base, points: "0" }), { error: "reglages_fidelite.erreur_points", field: "points" });
   assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "250", montant: "15000" }, { points: "100", montant: "5000" }] }), { error: "reglages_fidelite.erreur_paliers_ordre", field: "paliers" });
-  assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "100", montant: "50" }] }), { error: "reglages_fidelite.erreur_paliers_montant", field: "paliers" });
+  assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "100", montant: "50" }] }), { error: "reglages_fidelite.erreur_paliers_montant", field: "paliers", values: { min: 100, max: 10_000_000 } });
   assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "dix", montant: "5000" }] }), { error: "reglages_fidelite.erreur_paliers_points", field: "paliers" });
   assert.deepEqual(fideliteChanges(base, { ...base, tiers: [] }), { error: "reglages_fidelite.erreur_paliers_nombre", field: "paliers" });
   assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "50", montant: "2 000" }] }), { changes: [{ key: "fidelite.paliers", value: [{ points: 50, montant: 2000 }] }] });
@@ -85,5 +86,21 @@ test("montants en francs : séparateurs de milliers comme parseAmount, décimale
   const base = fideliteForm(SETTINGS);
   assert.deepEqual(fideliteChanges(base, { ...base, tranche: "1.000" }), { changes: [] });
   assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "100", montant: "15.000" }] }), { changes: [{ key: "fidelite.paliers", value: [{ points: 100, montant: 15000 }] }] });
-  assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "100", montant: "1,5" }] }), { error: "reglages_fidelite.erreur_paliers_montant", field: "paliers" });
+  assert.deepEqual(fideliteChanges(base, { ...base, tiers: [{ points: "100", montant: "1,5" }] }), { error: "reglages_fidelite.erreur_paliers_montant", field: "paliers", values: { min: 100, max: 10_000_000 } });
+});
+
+test("rubrique Fidélité en euros : formulaire relu sans changement ; un palier modifié, l'autre intact ; tranche de 10,50 €", () => {
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    const base = fideliteForm(SETTINGS, "fr");
+    assert.deepEqual([base.tranche, base.tiers.map((t) => t.montant)], ["10,00", ["50,00", "150,00"]]);
+    assert.deepEqual(fideliteChanges(base, base), { changes: [] }, "formulaire puis aucun changement");
+    assert.deepEqual(fideliteChanges(base, setTier(base, 0, { montant: "60" })), {
+      changes: [{ key: "fidelite.paliers", value: [{ points: 100, montant: 6000 }, { points: 250, montant: 15000 }] }],
+    }, "un palier modifié, l'autre intact");
+    assert.deepEqual(fideliteChanges(base, { ...base, tranche: "10,50" }), { changes: [{ key: "fidelite.tranche", value: 1050 }] });
+    assert.equal(fideliteForm(SETTINGS, "en").tranche, "10.00");
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
 });

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/provider";
-import { parseAmount } from "@/lib/format";
+import { modeSaisieMontant, parseAmount, texteSaisie } from "@/lib/format";
 import { amountProblem, lowStockValue, nameProblem } from "@/lib/forms";
 import type { Product } from "../types";
 import { Erreur } from "./champ";
@@ -13,15 +13,15 @@ import { Erreur } from "./champ";
 /** Produit : création, ou modification de `product`. Nom et catégorie ont leur version anglaise facultative juste en dessous (spec § 5.2). */
 export function CreateProduct({ onClose, product }: { onClose: () => void; product?: Product }) {
   const { addProduct, updateProduct } = useApp();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [name, setName] = useState(product?.name ?? "");
   const [nameEn, setNameEn] = useState(product?.name_en ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [category, setCategory] = useState(product?.category ?? "");
   const [categoryEn, setCategoryEn] = useState(product?.category_en ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
-  const [price, setPrice] = useState(String(product ? Math.round(product.price) : 0));
-  const [cost, setCost] = useState(String(product ? Math.round(product.cost ?? 0) : 0));
+  const [price, setPrice] = useState(texteSaisie(product ? product.price : 0, lang));
+  const [cost, setCost] = useState(texteSaisie(product ? product.cost ?? 0 : 0, lang));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   const [lowStockAlert, setLowStockAlert] = useState(String(product?.low_stock_alert ?? 5));
   const [saving, setSaving] = useState(false);
@@ -85,11 +85,11 @@ export function CreateProduct({ onClose, product }: { onClose: () => void; produ
             <div className="space-y-1.5">
               <Label htmlFor="fpr-prix">{t("produit.prix_vente")}</Label>
               {/* Champ de texte, non "number" : un "number" ne transmet jamais une saisie avec espace ("15 000"), la valeur arrive vide (décision du contrôleur, écart 1). */}
-              <Input id="fpr-prix" type="text" inputMode="numeric" value={price} onChange={(e: Event) => setPrice((e.target as HTMLInputElement).value)} />
+              <Input id="fpr-prix" type="text" inputMode={modeSaisieMontant()} value={price} onChange={(e: Event) => setPrice((e.target as HTMLInputElement).value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="fpr-cout">{t("produit.cout")}</Label>
-              <Input id="fpr-cout" type="text" inputMode="numeric" value={cost} onChange={(e: Event) => setCost((e.target as HTMLInputElement).value)} />
+              <Input id="fpr-cout" type="text" inputMode={modeSaisieMontant()} value={cost} onChange={(e: Event) => setCost((e.target as HTMLInputElement).value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

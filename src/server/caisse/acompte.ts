@@ -8,8 +8,9 @@
  * erreur annule tout, numéro compris.
  */
 import type { Database } from "../storage.ts";
-import { coded, type MessageKey } from "../messages.ts";
-import { PAYMENT_METHODS, REFERENCE_REQUIRED, SERIES, documentNumber, formatFrancs, wholeFrancs, yearAt, type PaymentMethod } from "../../shared/caisse.ts";
+import { coded, montant, type MessageKey } from "../messages.ts";
+import { PAYMENT_METHODS, REFERENCE_REQUIRED, SERIES, documentNumber, yearAt, type PaymentMethod } from "../../shared/caisse.ts";
+import { entierMineur } from "../../shared/montants.ts";
 import { checkClock, SaleError, takeNumber } from "./vente.ts";
 
 export type DepositStatus = "held" | "applied" | "refunded" | "kept";
@@ -83,7 +84,18 @@ function checkDepositPayments(payments: DepositPayment[], due: number, methods: 
     if (REFERENCE_REQUIRED.includes(p.method) && p.reference === "") throw new SaleError(400, "vente.reference_obligatoire", { moyen: coded(`moyen.${p.method}` as MessageKey) });
   }
   const received = payments.reduce((sum, p) => sum + p.amount, 0);
-  if (received !== due) throw new SaleError(409, sumKey, { recu: formatFrancs(received), du: formatFrancs(due) });
+  if (received !== due) throw new SaleError(409, sumKey, { recu: montant(received), du: montant(due) });
+}
+
+/** Total prévu d'un rendez-vous : prix de ses prestations et de leurs suppléments (prix unitaire × quantité), comme `total_price`. */
+export function plannedTotal(db: Database, appointmentId: number): number {
+  const services = (db.prepare("SELECT price FROM appointment_services WHERE appointment_id = ?").all(appointmentId) as { price: number }[])
+    .reduce((sum, s) => sum + entierMineur(s.price), 0);
+  const supplements = db.prepare(
+    `SELECT COALESCE(SUM(s.price * s.quantity), 0) AS total FROM appointment_supplements s
+       JOIN appointment_services aps ON aps.id = s.appointment_service_id WHERE aps.appointment_id = ?`,
+  ).get(appointmentId) as { total: number };
+  return services + Number(supplements.total);
 }
 
 /** Statuts d'un rendez-vous « à venir » : seul un rendez-vous réservé ou confirmé reçoit un acompte (§ 6.2). */
@@ -106,8 +118,8 @@ export interface DepositContext {
  * Encaisse un acompte, dans la transaction ouverte par l'appelant : même
  * `request_id` déjà servi pour ce rendez-vous, le reçu existant (`replay`) ;
  * pour un autre, refusé. Le rendez-vous doit être à venir, sans facture
- * active ni autre acompte en attente, et l'acompte ne dépasse pas le prix des
- * prestations prévues. Puis la suite AC de l'année avance d'un pas, le reçu
+ * active ni autre acompte en attente, et l'acompte ne dépasse pas le total prévu
+ * (prestations et suppléments). Puis la suite AC de l'année avance d'un pas, le reçu
  * et ses versements sont écrits.
  */
 export function issueDeposit(db: Database, req: DepositRequest, ctx: DepositContext): { id: number; replay: boolean } {
@@ -124,9 +136,8 @@ export function issueDeposit(db: Database, req: DepositRequest, ctx: DepositCont
   if (paid) throw new SaleError(409, "vente.rdv_deja_paye", { numero: String(paid.number) });
   const held = one(db, "SELECT number FROM deposits WHERE appointment_id = ? AND status = 'held'", req.appointment_id);
   if (held) throw new SaleError(409, "acompte.deja", { numero: String(held.number) });
-  const planned = (db.prepare("SELECT price FROM appointment_services WHERE appointment_id = ?").all(req.appointment_id) as { price: number }[])
-    .reduce((sum, s) => sum + wholeFrancs(s.price), 0);
-  if (req.amount > planned) throw new SaleError(409, "acompte.plafond", { prevu: formatFrancs(planned) });
+  const planned = plannedTotal(db, req.appointment_id);
+  if (req.amount > planned) throw new SaleError(409, "acompte.plafond", { prevu: montant(planned) });
   checkDepositPayments(req.payments, req.amount, ctx.methods, "acompte.versements");
 
   const series = SERIES.deposit;

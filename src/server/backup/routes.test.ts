@@ -24,15 +24,32 @@ async function withBackup(t: Parameters<typeof setupApp>[0], exec: Exec = async 
   return { ctx, dir, identity, restarts: () => restarts };
 }
 
+/** Base installée il y a `heures` heures : le premier compte date de là. */
+function installeeIlYA(ctx: Awaited<ReturnType<typeof setupApp>>, heures: number) {
+  ctx.db.prepare("UPDATE accounts SET created_at = ?").run(ctx.clock.now - heures * 3600e3);
+}
+
 test("état des sauvegardes : alerte après 36 h sans succès", async (t) => {
   const { ctx } = await withBackup(t);
   const gerante = await ctx.as("manager");
+  installeeIlYA(ctx, 72);
   assert.equal((await gerante("GET", "/api/backups/status")).body.alert, true, "jamais sauvegardé");
   ctx.db.prepare("INSERT INTO backups (at, destination, status, file) VALUES (?, 'usb', 'ok', 'x')").run(ctx.clock.now - 35 * 3600e3);
   ctx.db.prepare("INSERT INTO backups (at, destination, status, file) VALUES (?, 'drive', 'ok', 'x')").run(ctx.clock.now - 35 * 3600e3);
   assert.equal((await gerante("GET", "/api/backups/status")).body.alert, false);
   ctx.clock.now += 2 * 3600e3;
   assert.equal((await gerante("GET", "/api/backups/status")).body.alert, true);
+});
+
+test("base neuve : aucune alerte pendant ses 36 premières heures, même jamais sauvegardée", async (t) => {
+  const { ctx } = await withBackup(t);
+  const gerante = await ctx.as("manager");
+  const statut = async () => (await gerante("GET", "/api/backups/status")).body;
+  assert.equal((await statut()).alert, false, "installée à l'instant");
+  installeeIlYA(ctx, 35);
+  assert.deepEqual([(await statut()).alert, (await statut()).destinations.usb.alert], [false, false]);
+  installeeIlYA(ctx, 37);
+  assert.deepEqual([(await statut()).alert, (await statut()).destinations.usb.alert], [true, true], "37 h après l'installation, toujours rien");
 });
 
 function configureDrive(ctx: Awaited<ReturnType<typeof setupApp>>) {
@@ -42,6 +59,7 @@ function configureDrive(ctx: Awaited<ReturnType<typeof setupApp>>) {
 test("alerte des 36 h : Google Drive ignoré tant que sa destination n'est pas configurée", async (t) => {
   const { ctx } = await withBackup(t);
   const gerante = await ctx.as("manager");
+  installeeIlYA(ctx, 72);
   ctx.db.prepare("INSERT INTO backups (at, destination, status, file) VALUES (?, 'usb', 'ok', 'x')").run(ctx.clock.now - 3600e3);
   ctx.db.prepare("INSERT INTO backups (at, destination, status, file, message) VALUES (?, 'drive', 'failed', 'x', 'non configuré')").run(ctx.clock.now - 3600e3);
   const before = (await gerante("GET", "/api/backups/status")).body;
@@ -59,6 +77,7 @@ test("alerte des 36 h par destination : Google Drive en échec déclenche l'aler
   const { ctx } = await withBackup(t);
   configureDrive(ctx);
   const gerante = await ctx.as("manager");
+  installeeIlYA(ctx, 72);
   for (let day = 3; day >= 0; day--) {
     const at = ctx.clock.now - day * 24 * 3600e3;
     ctx.db.prepare("INSERT INTO backups (at, destination, status, file) VALUES (?, 'usb', 'ok', 'x')").run(at);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { DICTIONARIES, normalizeLang, translate, translatePlural, type Key } from "./translate.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
 import { englishFaults, frenchFaults, placeholders, titleCaseFaults } from "./typography.ts";
 
 const keys = (lang: "fr" | "en") => Object.keys(DICTIONARIES[lang]).sort();
@@ -94,4 +95,22 @@ test("normalizeLang : fr ou en, le français pour tout le reste", () => {
 test("libellé du thème du rail traduit d'un bloc, typographie de chaque langue (décision C2)", () => {
   assert.equal(translate("fr", "theme.actuel", { nom: translate("fr", "theme.clair") }), "Thème\u00a0: Clair");
   assert.equal(translate("en", "theme.actuel", { nom: translate("en", "theme.clair") }), "Theme: Light");
+});
+
+test("{devise} : symbole de la devise active dans les libellés", () => {
+  assert.equal(translate("fr", "prestation.prix"), "Prix (F)");
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.equal(translate("en", "produit.cout"), "Cost (€)");
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("aucun texte de l'écran n'écrit « F » ou « francs » en dur", () => {
+  for (const [lang, dict] of Object.entries(DICTIONARIES)) {
+    for (const [key, text] of Object.entries(dict)) {
+      assert.doesNotMatch(String(text), /\bfrancs?\b|\(F\)|\d\u00a0F\b/i, `${lang} ${key}`);
+    }
+  }
 });

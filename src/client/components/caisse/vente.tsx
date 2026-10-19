@@ -202,6 +202,7 @@ export function Vente({ appointmentId }: { appointmentId: string | null }) {
             <TicketVente
               ticket={ticket}
               lines={priced.lines}
+              catalog={{ services, products: products.data?.products ?? [] }}
               totals={share.totals}
               deposit={share.deposit}
               depositExceeds={share.exceeds}

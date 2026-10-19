@@ -25,7 +25,7 @@ const FOCUS = "focus-visible:outline focus-visible:outline-1 focus-visible:outli
 export function Montant({ valeur }: { valeur: string | number }) {
   const parts = typeof valeur === "string" ? splitAmount(valeur) : null;
   if (!parts) return <>{valeur}</>;
-  return <span className="whitespace-nowrap">{parts[0]}{"\u00a0"}{parts[1]}</span>;
+  return <span className="whitespace-nowrap">{parts.avant && <>{parts.avant}{"\u00a0"}</>}{parts.nombre}{parts.apres && <>{"\u00a0"}{parts.apres}</>}</span>;
 }
 
 /**

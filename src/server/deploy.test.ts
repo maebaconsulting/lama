@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,7 +133,8 @@ test("sauvegarde de nuit à 2 h, heure de Douala, rattrapée après une coupure"
 test("installation : disque monté sans bloquer le démarrage, clé privée jamais écrite sur le serveur", () => {
   const s = read("installer.sh");
   assert.match(s, /LABEL=LAMA-SAUVEGARDE \/mnt\/lama-sauvegarde ext4 nofail,[^\n]*x-systemd\.automount/);
-  assert.match(s, /timedatectl set-timezone Africa\/Douala/);
+  assert.match(s, /^FUSEAU=Africa\/Douala$/m, "Douala par défaut, en mode automatique");
+  assert.match(s, /timedatectl set-timezone "\$FUSEAU"/);
   assert.match(s, /^NOM_RESEAU=lama$/m);
   assert.match(s, /install -d -m 0700 -o "\$COMPTE" -g "\$COMPTE" "\$DATA"/);
   assert.match(s, /install -d -m 0750 -o root -g "\$COMPTE" "\$CONF"/);
@@ -1186,4 +1187,56 @@ test("installer_waha : chaque échec renvoie 1 avec son motif, sans inscrire la 
     assert.match(r.sortie, motif, echec);
     if (echec !== "runuser") assert.equal(r.recu, "", `${echec} : clé non inscrite`);
   }
+});
+
+// ── Installation automatique ou assistée (choisir_mode, demander, demander_texte) ──
+
+/** Lance `appel` après avoir chargé installer.sh (fonctions seules), avec `entree` sur l'entrée standard. */
+function fonctionInstalleur(appel: string, entree = "", vars: Record<string, string> = {}): { code: number; sortie: string; erreur: string } {
+  const r = spawnSync("bash", ["-c", `set -euo pipefail; source '${join(DEPLOY, "installer.sh")}'; ${appel}`], {
+    input: entree, encoding: "utf8", env: envWith({ LAMA_LANGUE: "fr", ...vars }),
+  });
+  return { code: r.status ?? -1, sortie: r.stdout, erreur: r.stderr };
+}
+
+test("choisir_mode : options --auto et --assiste (--assisted), menu sinon, Entrée ou entrée fermée = automatique", () => {
+  assert.equal(fonctionInstalleur("choisir_mode --auto").sortie, "auto");
+  assert.equal(fonctionInstalleur("choisir_mode --assiste").sortie, "assiste");
+  assert.equal(fonctionInstalleur("choisir_mode --assisted").sortie, "assiste");
+  const inconnue = fonctionInstalleur("choisir_mode --vite");
+  assert.equal(inconnue.code, 1);
+  assert.match(inconnue.erreur, /Option inconnue\u00a0: --vite/);
+  const menu = fonctionInstalleur("choisir_mode", "3\n2\n");
+  assert.equal(menu.sortie, "assiste", "une réponse hors menu est redemandée");
+  assert.match(menu.erreur, /1\. Automatique\u00a0: réglages par défaut, aucune question\n  2\. Assistée/);
+  assert.equal(fonctionInstalleur("choisir_mode", "\n").sortie, "auto");
+  assert.equal(fonctionInstalleur("choisir_mode", "").sortie, "auto", "entrée fermée : pas de boucle sans fin");
+  assert.match(fonctionInstalleur("choisir_mode", "1\n", { LAMA_LANGUE: "en" }).erreur, /1\. Automatic: default settings, no questions/);
+});
+
+test("demander : mode automatique, réponse par défaut sans rien lire ; mode assisté, réponse lue, défaut sur Entrée", () => {
+  const oui = (appel: string, entree = "", mode = "auto") => fonctionInstalleur(`MODE=${mode}; if ${appel}; then echo OUI; else echo NON; fi`, entree);
+  assert.equal(oui('demander "WhatsApp ?" o', "n\n").sortie, "OUI\n", "automatique : la réponse tapée est ignorée");
+  assert.equal(oui('demander "Formation ?" n', "o\n").sortie, "NON\n");
+  assert.equal(oui('demander "Formation ?" n', "", "auto").erreur, "", "automatique : aucune question affichée");
+  assert.equal(oui('demander "WhatsApp ?" o', "\n", "assiste").sortie, "OUI\n");
+  assert.equal(oui('demander "Formation ?" n', "\n", "assiste").sortie, "NON\n");
+  assert.equal(oui('demander "Formation ?" n', "peut-être\noui\n", "assiste").sortie, "OUI\n", "réponse inconnue redemandée");
+  assert.equal(oui('demander "WhatsApp ?" o', "non\n", "assiste").sortie, "NON\n");
+  assert.equal(oui('demander "Formation ?" n', "", "assiste").sortie, "NON\n", "entrée fermée : défaut");
+  assert.match(oui('demander "WhatsApp ?" o', "\n", "assiste").erreur, /WhatsApp \? \[O\/n\]/);
+  assert.equal(fonctionInstalleur('demander_texte "Fuseau" Africa/Douala', "\n").sortie, "Africa/Douala");
+  assert.equal(fonctionInstalleur('demander_texte "Fuseau" Africa/Douala', "Europe/Paris\n").sortie, "Europe/Paris");
+});
+
+test("installation : WhatsApp, veille, disque neuf, formation et Google Drive passent par demander ; disque effacé seulement par preparer-disque.sh", () => {
+  const s = read("installer.sh");
+  assert.match(s, /MODE="\$\(choisir_mode "\$\{1:-\}"\)" \|\| exit 1/);
+  assert.match(s, /if demander "[^\n]*WhatsApp[^\n]*" o; then\n  installer_waha/);
+  assert.match(s, /&& demander "[^\n]*mise en veille[^\n]*" o; then/);
+  assert.match(s, /if demander "[^\n]*base de formation[^\n]*" n; then/);
+  assert.match(s, /if demander "[^\n]*Google Drive[^\n]*" n; then/);
+  assert.match(s, /if \[ "\$MODE" = "assiste" \] && ! blkid -L LAMA-SAUVEGARDE/);
+  assert.match(s, /grep -xF -- "\$\{NOM_DISQUE#\/dev\/\}" >\/dev\/null; then\n\s+"\$APP\/actuelle\/deploy\/preparer-disque\.sh"/, "seul un disque USB de la liste est proposé à l'effacement");
+  assert.doesNotMatch(s, /\b(mkfs|wipefs|sgdisk)\b|\bparted\s+(-\w+\s+)*["$/]/, "installer.sh n'efface jamais un disque lui-même");
 });

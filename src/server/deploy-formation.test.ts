@@ -20,7 +20,7 @@ const DEPLOY = new URL("../../deploy/", import.meta.url).pathname;
 const read = (name: string) => readFileSync(join(DEPLOY, name), "utf8");
 
 /** Exécute `appel` après avoir chargé lama-formation.sh, avec des commandes simulées qui notent leurs appels dans `journal`. */
-function essai(appel: string, entree = "", langue = "fr", sansCompte: boolean | null = false): { code: number; sortie: string; erreurs: string; journal: string[]; recu: string } {
+function essai(appel: string, entree = "", langue = "fr", sansCompte: boolean | null = false, deviseLue: string | null = ""): { code: number; sortie: string; erreurs: string; journal: string[]; recu: string } {
   const dir = mkdtempSync(join(tmpdir(), "lama-formation-sh-"));
   const journal = join(dir, "journal");
   const recu = join(dir, "recu");
@@ -33,6 +33,8 @@ function essai(appel: string, entree = "", langue = "fr", sansCompte: boolean | 
     `source '${join(DEPLOY, "lama-formation.sh")}'`,
     `comme_formation() { echo "comme_formation $*" >> '${journal}'; cat >> '${recu}'; }`,
     `systemctl() { echo "systemctl $*" >> '${journal}'; }`,
+    // Lecture de la vraie base simulée : `deviseLue` sur la sortie, ou un échec (`null`).
+    deviseLue === null ? `lire_devise_vraie_base() { echo "lire_devise_vraie_base" >> '${journal}'; return 1; }` : `lire_devise_vraie_base() { echo "lire_devise_vraie_base" >> '${journal}'; printf '%s' '${deviseLue}'; }`,
     `formation_repond() { echo "formation_repond" >> '${journal}'; }`,
     ...(sansCompte === null ? [] : [`remise_sans_compte() { echo "remise_sans_compte" >> '${journal}'; ${sansCompte ? "true" : "false"}; }`]),
     `DATA_FORMATION='${dir}'`,
@@ -62,7 +64,7 @@ test("comptes : chaque mot de passe demandé deux fois, trop court ou différent
   const entree = ["court", MOTS[0], MOTS[0], MOTS[1], "autre-chose-123", MOTS[1], MOTS[1], MOTS[2], MOTS[2], MOTS[3], MOTS[3]].join("\n") + "\n";
   const r = essai("ecrire_comptes", entree);
   assert.equal(r.code, 0, r.erreurs);
-  assert.deepEqual(r.journal, ["comme_formation /usr/bin/node /opt/lama/actuelle/dist-server/cli.mjs formation-comptes"]);
+  assert.deepEqual(r.journal, ["lire_devise_vraie_base", "comme_formation /usr/bin/node /opt/lama/actuelle/dist-server/cli.mjs formation-comptes"], "sans réglage lu, aucune option : XAF");
   assert.equal(r.recu, `${MOTS.join("\n")}\n`, "un mot de passe par ligne, dans l'ordre de COMPTES_FORMATION");
   assert.match(r.erreurs, /Mot de passe du compte administration/);
   assert.match(r.erreurs, /Mot de passe du compte praticienne/);
@@ -74,7 +76,26 @@ test("comptes : chaque mot de passe demandé deux fois, trop court ou différent
 test("comptes : saisie interrompue (fin de l'entrée), rien n'est passé au programme", () => {
   const r = essai("ecrire_comptes", `${MOTS[0]}\n${MOTS[0]}\n`);
   assert.notEqual(r.code, 0);
-  assert.deepEqual(r.journal, []);
+  assert.deepEqual(r.journal, ["lire_devise_vraie_base"]);
+});
+
+test("comptes : devise de la vraie base lue d'abord, passée en options à formation-comptes ; lecture en échec, rien n'est passé", () => {
+  const entree = MOTS.flatMap((m) => [m, m]).join("\n") + "\n";
+  const r = essai("ecrire_comptes", entree, "fr", false, "--devise\nEUR\n--position\navant\n--symbole-ecran\nnon\n");
+  assert.equal(r.code, 0, r.erreurs);
+  assert.deepEqual(r.journal, ["lire_devise_vraie_base", "comme_formation /usr/bin/node /opt/lama/actuelle/dist-server/cli.mjs formation-comptes --devise EUR --position avant --symbole-ecran non"]);
+  assert.equal(r.recu, `${MOTS.join("\n")}\n`);
+  const echec = essai("ecrire_comptes", entree, "fr", false, null);
+  assert.notEqual(echec.code, 0);
+  assert.deepEqual(echec.journal, ["lire_devise_vraie_base"]);
+  assert.match(echec.erreurs, /La devise de la vraie base n'a pas pu être lue\./);
+  assert.equal(echec.recu, "", "aucun mot de passe demandé ni passé");
+});
+
+test("lecture de la devise : sous le compte de lama, sur la vraie base, hors mode formation", () => {
+  const s = read("lama-formation.sh");
+  assert.match(s, /^COMPTE_LAMA=lama$/m);
+  assert.match(s, /^lire_devise_vraie_base\(\) \{ \( cd \/ && runuser -u "\$COMPTE_LAMA" -- env -u LAMA_FORMATION -u LAMA_DEMO_PUBLIQUE LAMA_DATA_DIR=\/var\/lib\/lama LAMA_CONFIG_DIR=\/etc\/lama HOME=\/var\/lib\/lama \/usr\/bin\/node "\$APP\/actuelle\/dist-server\/cli\.mjs" lire-devise \); \}$/m);
 });
 
 test("remise à zéro : service arrêté, demande déposée par le compte de la formation, service relancé, réponse attendue", () => {

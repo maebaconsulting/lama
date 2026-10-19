@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { embedded } from "@clawnify/app/client";
 import { useApp } from "../context";
 import { useAuth } from "../auth-context";
@@ -10,7 +10,11 @@ import { GrilleAgenda } from "./agenda/grille";
 import { Pastilles } from "./agenda/pastilles";
 import { Succes } from "./champ";
 import { TransfertRdv } from "./transfert-rdv";
+import { api } from "../api";
+import { useLoad } from "../hooks/use-load";
+import { useRefresh } from "../hooks/use-refresh";
 import { useWide } from "../hooks/use-wide";
+import { heuresFermees, type Semaine } from "../../shared/horaires";
 import { useI18n } from "@/i18n/provider";
 import {
   agendaColumns, countByColumn, defaultColumnKey, neighborColumn, shownColumnKey, swipeStep, type AgendaColumn,
@@ -22,6 +26,7 @@ import { formatLongDate } from "@/lib/format";
 import { appointmentCommands, canSell } from "@/lib/roles";
 import { pathFor } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import type { DemandeAgenda } from "../types";
 
 const MINUTE_MS = 60_000;
 
@@ -68,6 +73,26 @@ export function CalendarView() {
   }, []);
 
   const columns = agendaColumns(staffLookup, calendarAppointments, t("commun.non_attribue"));
+  // Horaires de l'institut et semaine type (réservation en ligne, § 4.1) : heures fermées grisées par colonne.
+  const { data: horaires } = useLoad(() => api<{ institut: Semaine }>("GET", "/api/horaires"), ["settings"]);
+  const fermees = (column: AgendaColumn) =>
+    horaires ? heuresFermees(staffLookup.find((s) => s.id === column.staffId)?.horaires ?? null, horaires.institut, calendarDate) : [];
+  // Demandes en ligne à confirmer du jour (spec § 4.4) : cartes hachurées ; la praticienne n'en reçoit que l'horaire (« Réservé »).
+  // Une seule requête par jour affiché ; une réponse arrivée après un changement de jour est ignorée.
+  const [enLigne, setEnLigne] = useState<{ date: string; demandes: DemandeAgenda[] } | null>(null);
+  const jourAffiche = useRef(calendarDate);
+  jourAffiche.current = calendarDate;
+  const chargerDemandes = useCallback(async () => {
+    const date = jourAffiche.current;
+    try {
+      const r = await api<{ demandes: DemandeAgenda[] }>("GET", `/api/demandes-en-ligne/agenda?date=${date}`);
+      if (date === jourAffiche.current) setEnLigne({ date, demandes: r.demandes });
+    } catch {
+      // Demandes indisponibles : l'agenda reste lisible sans elles, le prochain signal relira.
+    }
+  }, []);
+  useEffect(() => { void chargerDemandes(); }, [calendarDate, chargerDemandes]);
+  useRefresh(["demandes", "calendar"], () => { void chargerDemandes(); });
   const counts = countByColumn(columns, calendarAppointments);
   const shown = shownColumnKey(chosen, columns, defaultColumnKey(account.role, account.staff_id, columns, counts));
   const visible = wide ? columns : columns.filter((c) => c.key === shown);
@@ -180,6 +205,9 @@ export function CalendarView() {
             showHeaders={wide}
             onSlot={onSlot}
             canUnblock={commands.block}
+            fermees={fermees}
+            demandes={enLigne?.date === calendarDate ? enLigne.demandes : []}
+            onDemande={account.role === "practitioner" ? null : () => navigate(pathFor("demandes", lang))}
           />
         </div>
       )}

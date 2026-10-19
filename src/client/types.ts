@@ -1,6 +1,27 @@
-export type View = "dashboard" | "calendar" | "appointments" | "clients" | "staff" | "services" | "products" | "charte" | "reglages" | "vente" | "caisse";
+import type { Semaine } from "../shared/horaires";
+export type View = "dashboard" | "calendar" | "appointments" | "clients" | "staff" | "services" | "products" | "charte" | "reglages" | "vente" | "caisse" | "demandes";
 
 export type AppointmentStatus = "booked" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
+
+/** Article d'une liste de suppléments possibles (spec du 18/10/2026 § 3.1). */
+export interface SupplementRef {
+  kind: "service" | "product";
+  ref_id: number;
+}
+
+/** Supplément posé sous une prestation d'un rendez-vous (§ 3.3) : libellés, prix et minutes figés ; sans prix d'un article du catalogue pour la praticienne (celui d'un libre lui reste). */
+export interface AppointmentSupplement {
+  id: number;
+  appointment_service_id: number;
+  kind: "service" | "product" | "libre";
+  ref_id: number | null;
+  label_fr: string;
+  label_en: string;
+  quantity: number;
+  price?: number;
+  minutes: number;
+  position: number;
+}
 
 export interface Appointment {
   id: number;
@@ -36,6 +57,8 @@ export interface Appointment {
   appointment_notes?: AppointmentNote[];
   created_at: string;
   updated_at: string;
+  /** 1 si le rendez-vous vient d'une demande en ligne (réservation en ligne, étape 3). */
+  en_ligne?: number;
 }
 
 export interface AppointmentService {
@@ -46,6 +69,7 @@ export interface AppointmentService {
   service_name_en?: string | null;
   price: number;
   duration: number;
+  supplements?: AppointmentSupplement[];
 }
 
 export interface AppointmentNote {
@@ -94,6 +118,9 @@ export interface Staff {
   active: number;
   appointment_count?: number;
   created_at: string;
+  horaires: Semaine | null;
+  en_ligne: number;
+  service_ids: number[];
 }
 
 export interface Service {
@@ -110,6 +137,11 @@ export interface Service {
   active: number;
   /** Nombre de rendez-vous où figure cette prestation ; sert à ne pas proposer « Supprimer » quand elle est utilisée. */
   appointment_count?: number;
+  en_ligne: number;
+  /** 1 : ne se vend pas seule, seulement en supplément d'une prestation qui l'accepte. */
+  supplement_seulement?: number;
+  /** Suppléments possibles, dans l'ordre réglé par la gérante. */
+  supplements?: SupplementRef[];
   created_at: string;
 }
 
@@ -173,6 +205,8 @@ export interface StaffLookup {
   id: number;
   name: string;
   color: string;
+  horaires: Semaine | null;
+  service_ids: number[];
 }
 
 /** Synthèse de la fiche d'une cliente (mini CRM § 1), calculée par le serveur ; montants absents pour la praticienne. */
@@ -194,4 +228,58 @@ export interface ClientSummary {
 export interface TagCount {
   tag: string;
   count: number;
+}
+
+/** État d'une demande en ligne (spec du 16/10/2026 § 4.4). */
+export type EtatDemande = "a_confirmer" | "en_conflit" | "a_rappeler" | "confirmee" | "autre_horaire" | "refusee" | "traitee";
+
+/** Demande en ligne telle que la rend `GET /api/demandes-en-ligne`. */
+export interface DemandeEnLigne {
+  id: number;
+  type: "creneau" | "rappel";
+  etat: EtatDemande;
+  service_id: number | null;
+  prestation_ref: string;
+  prestation_nom: string;
+  prestation_nom_en: string;
+  staff_demande_id: number | null;
+  staff_demande_nom: string | null;
+  sans_preference: number;
+  staff_id: number | null;
+  staff_nom: string | null;
+  date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  cliente_nom: string;
+  cliente_telephone: string;
+  cliente_langue: "fr" | "en";
+  note: string;
+  souhait: { jours: string[]; moments: string[]; precision: string } | null;
+  fiche: "connue" | "nouvelle" | "a_verifier";
+  client_id: number | null;
+  client_nom: string | null;
+  tentatives: number;
+  appointment_id: number | null;
+  autre_date: string | null;
+  autre_heure: string | null;
+  autre_staff_id: number | null;
+  autre_staff_nom: string | null;
+  motif: string;
+  recue_le: number;
+  decidee_le: number | null;
+  decidee_par_nom: string | null;
+  /** Décision prise mais pas encore transmise au relais. */
+  decision_attente: boolean;
+}
+
+/** Demande à confirmer dans l'agenda ; la praticienne n'en reçoit que la praticienne et l'horaire. */
+export interface DemandeAgenda {
+  id?: number;
+  staff_id: number;
+  start_time: string;
+  end_time: string;
+  cliente_nom?: string;
+  prestation_nom?: string;
+  prestation_nom_en?: string;
+  sans_preference?: number;
 }

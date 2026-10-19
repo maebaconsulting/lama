@@ -36,12 +36,15 @@ export function mountBackupRoutes(app: OpenAPIHono<any>): void {
     // Google Drive n'est surveillé qu'une fois sa destination réglée par
     // l'administrateur : sinon le bandeau resterait allumé en permanence.
     const driveConfigured = (await get("SELECT key FROM settings WHERE key = 'technique.drive_remote'")) != null;
+    // Base installée depuis moins de 36 h (premier compte créé) : rien n'a encore pu être sauvegardé, aucune alerte.
+    const installee = await get<{ at: number | null }>("SELECT MIN(created_at) AS at FROM accounts");
+    const neuve = installee?.at == null || nowOf(c) - installee.at < ALERT_AFTER_MS;
     const destinations: Record<string, { last_ok_at: number | null; alert: boolean; configured: boolean }> = {};
     for (const destination of ["usb", "drive"]) {
       const configured = destination === "usb" || driveConfigured;
       const last = await get<{ at: number | null }>("SELECT MAX(at) AS at FROM backups WHERE status = 'ok' AND destination = ?", [destination]);
       const lastOk = last?.at ?? null;
-      destinations[destination] = { last_ok_at: lastOk, alert: !estFormation() && configured && (lastOk === null || nowOf(c) - lastOk > ALERT_AFTER_MS), configured };
+      destinations[destination] = { last_ok_at: lastOk, alert: !estFormation() && !neuve && configured && (lastOk === null || nowOf(c) - lastOk > ALERT_AFTER_MS), configured };
     }
     const okTimes = Object.values(destinations).filter((d) => d.configured).map((d) => d.last_ok_at).filter((at): at is number => at !== null);
     return c.json({

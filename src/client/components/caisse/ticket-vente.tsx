@@ -9,13 +9,14 @@ import { aroundAmount, discountLabel, vatLabel } from "@/lib/caisse-texte";
 import type { SaleSettings } from "@/lib/caisse-types";
 import { formatPrice } from "@/lib/format";
 import {
-  defaultTipStaff, dropStaleReward, emptyTicket, needsClient, removeLine, setClient, setDiscount, setLineStaff, setQuantity, setTip, type PricedLine, type Ticket,
+  addSupplement, defaultTipStaff, dropStaleReward, emptyTicket, needsClient, quantityOf, removeLine, removeSupplement, setClient, setDiscount, setLineStaff, setQuantity, setSupplementQuantity, setTip, type PricedLine, type Ticket,
 } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 import type { Totals } from "../../../shared/caisse";
-import type { Appointment, ClientLookup, StaffLookup } from "../../types";
+import type { Appointment, ClientLookup, Product, Service, StaffLookup } from "../../types";
 import { BoutonDestructif, Montant } from "../comptoir";
 import { Case, SELECT } from "../reglages/elements";
+import { FenetreSupplement } from "./fenetre-supplement";
 import { ChoixCliente, FenetrePourboire, FenetreRecompense, FenetreRemise } from "./fenetres";
 import { useSoldeFidelite } from "../../hooks/use-solde-fidelite";
 import { pointsText, rewardChoices } from "@/lib/fidelite";
@@ -39,9 +40,11 @@ function Total({ libelle, montant, moins = false }: { libelle: string; montant: 
  * TVA », total, pourboire hors facture (puis « À payer », total et pourboire,
  * en grand à la place du total), puis « Encaisser <montant> ».
  */
-export function TicketVente({ ticket, lines, totals, deposit = null, depositExceeds = false, depositOtherClient = false, counterDeposit = null, settings, appointment, clients, staff, onChange, onCharge, onBack }: {
+export function TicketVente({ ticket, lines, catalog, totals, deposit = null, depositExceeds = false, depositOtherClient = false, counterDeposit = null, settings, appointment, clients, staff, onChange, onCharge, onBack }: {
   ticket: Ticket;
   lines: PricedLine[];
+  /** Catalogue chargé : suppléments possibles d'une prestation et stock de leurs produits (spec du 18/10/2026 § 3.4). */
+  catalog: { services: Service[]; products: Product[] };
   /** Totaux, `due` déjà diminué de l'acompte en attente s'il y en a un (jamais si `depositOtherClient`). */
   totals: Totals;
   /** Acompte en attente du rendez-vous (vague 3b), déjà reçu : montré au ticket, déduit de « À payer ». */
@@ -66,6 +69,8 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
   const { addClient } = useApp();
   const crm = useCrm();
   const [fenetre, setFenetre] = useState<Fenetre>(null);
+  // Prestation du ticket dont la fenêtre « + Supplément » est ouverte (indice de sa ligne).
+  const [supplementDe, setSupplementDe] = useState<number | null>(null);
   const client = clients.find((c) => c.id === ticket.client_id) ?? null;
   // Fidélité (mini CRM § 2) : solde de la cliente choisie et paliers atteints ; jamais pour la praticienne,
   // et `settings.loyalty` peut manquer (encaissement fermé) : lu avec précaution. Mini CRM désactivé :
@@ -142,7 +147,7 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
                     <div className="flex items-center gap-1">
                       <Button variant="outline" size="icon" aria-label={t("caisse.moins", { designation: l.missing ? t("caisse.article_retire") : l.label })} onClick={() => onChange(setQuantity(ticket, l.index, l.line.quantity - 1))}><Minus aria-hidden="true" /></Button>
                       <span className="chiffres w-10 text-center text-lg" aria-label={t("caisse.quantite")}>{l.line.quantity}</span>
-                      <Button variant="outline" size="icon" aria-label={t("caisse.plus", { designation: l.missing ? t("caisse.article_retire") : l.label })} disabled={l.stock !== null && l.line.quantity >= l.stock} onClick={() => onChange(setQuantity(ticket, l.index, l.line.quantity + 1, l.stock ?? undefined))}><Plus aria-hidden="true" /></Button>
+                      <Button variant="outline" size="icon" aria-label={t("caisse.plus", { designation: l.missing ? t("caisse.article_retire") : l.label })} disabled={l.stock !== null && quantityOf(ticket, l.line.ref_id) >= l.stock} onClick={() => onChange(setQuantity(ticket, l.index, l.line.quantity + 1, l.stock ?? undefined))}><Plus aria-hidden="true" /></Button>
                     </div>
                   ) : (
                     <select
@@ -157,6 +162,34 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
                   )}
                   <Button variant="ghost" size="icon" className="ml-auto" aria-label={t("caisse.retirer_ligne")} onClick={() => onChange(removeLine(ticket, l.index))}><X aria-hidden="true" /></Button>
                 </div>
+                {l.line.kind === "service" && (
+                  <div className="space-y-1.5 border-l border-filet pl-3">
+                    {l.supplements.map((s) => {
+                      // Nom lu une fois : un article retiré du catalogue n'a plus de libellé.
+                      const nom = s.missing ? t("caisse.article_retire") : s.label;
+                      return (
+                        <div key={s.index} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                          <Plus className="h-3 w-3 shrink-0 text-encre-grise" aria-hidden="true" />
+                          <span className={cn("min-w-[8rem] flex-1 break-words", s.missing && "text-encre-rouge")}>{nom}</span>
+                          <span className="ml-auto flex items-center gap-2">
+                            {s.supplement.kind === "product" && (
+                              <span className="flex items-center gap-1">
+                                <Button variant="outline" size="icon" aria-label={t("caisse.moins", { designation: nom })} onClick={() => onChange(setSupplementQuantity(ticket, l.index, s.index, s.supplement.quantity - 1))}><Minus aria-hidden="true" /></Button>
+                                <span className="chiffres w-8 text-center" aria-label={t("caisse.quantite")}>{s.supplement.quantity}</span>
+                                <Button variant="outline" size="icon" aria-label={t("caisse.plus", { designation: nom })} disabled={s.stock !== null && quantityOf(ticket, s.supplement.ref_id!) >= s.stock} onClick={() => onChange(setSupplementQuantity(ticket, l.index, s.index, s.supplement.quantity + 1, s.stock ?? undefined))}><Plus aria-hidden="true" /></Button>
+                              </span>
+                            )}
+                            <span className="chiffres whitespace-nowrap">{formatPrice(s.line_total, lang)}</span>
+                            <Button variant="ghost" size="icon" aria-label={t("supplement.retirer", { nom })} onClick={() => onChange(removeSupplement(ticket, l.index, s.index))}><X aria-hidden="true" /></Button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {!l.missing && (
+                      <Button variant="outline" className="h-11" aria-label={t("supplement.ajouter_a", { nom: l.label })} onClick={() => setSupplementDe(l.index)}><Plus aria-hidden="true" />{t("supplement.ajouter")}</Button>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -224,6 +257,17 @@ export function TicketVente({ ticket, lines, totals, deposit = null, depositExce
         </Button>
       </div>
 
+      {supplementDe !== null && lines[supplementDe] && (
+        <FenetreSupplement
+          ticket={ticket}
+          serviceId={lines[supplementDe].line.ref_id}
+          nom={lines[supplementDe].label}
+          catalog={catalog}
+          libre={account.role !== "practitioner"}
+          onClose={() => setSupplementDe(null)}
+          onDone={(sup, stock) => { onChange(addSupplement(ticket, supplementDe, sup, stock)); setSupplementDe(null); }}
+        />
+      )}
       {fenetre === "cliente" && (
         <ChoixCliente
           clients={clients}

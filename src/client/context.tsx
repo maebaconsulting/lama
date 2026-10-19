@@ -3,7 +3,7 @@ import { useContext } from "preact/hooks";
 import type { PanelKind, PanelRef } from "./lib/routes";
 import type {
   Appointment, Client, ClientSummary, Staff, Service, Product, BlockedSlot, Stats, PaginatedState,
-  ClientLookup, StaffLookup, TagCount,
+  ClientLookup, StaffLookup, TagCount, SupplementRef,
 } from "./types";
 
 export interface AppContextValue {
@@ -36,8 +36,10 @@ export interface AppContextValue {
     is_recurring?: number;
     recurrence_interval?: string;
     service_ids?: number[];
+    supplements?: Record<string, unknown>[];
     allow_conflict?: boolean;
   }) => Promise<void>;
+  saveAppointmentSupplements: (id: number, supplements: Record<string, unknown>[], allowConflict?: boolean) => Promise<void>;
   updateAppointment: (id: number, data: Partial<Appointment> & { allow_conflict?: boolean; notify_transfer?: boolean }) => Promise<void>;
   deleteAppointment: (id: number) => Promise<void>;
 
@@ -90,6 +92,8 @@ export interface AppContextValue {
   reloadServices: () => Promise<void>;
   addService: (data: Partial<Service>) => Promise<void>;
   updateService: (id: number, data: Partial<Service>) => Promise<void>;
+  saveServiceSupplements: (id: number, items: SupplementRef[]) => Promise<void>;
+  copyServiceSupplements: (id: number, targets: number[]) => Promise<void>;
   deleteService: (id: number) => Promise<void>;
 
   // Products

@@ -5,14 +5,18 @@ import { openSecret, sealSecret } from "./auth/crypto.ts";
 import { clientIp, currentAccount, requireConfirmation } from "./auth/middleware.ts";
 import { logAudit } from "./audit.ts";
 import { nowOf } from "./clock.ts";
-import { coded, localize, msg } from "./messages.ts";
+import { coded, localize, montant, msg, type MessageKey } from "./messages.ts";
+import { adresseRelaisValide, MOTIF_SALON, problemeTheme, TEXTE_DONNEES } from "../shared/en-ligne.ts";
 import { DEFAULT_TEXTS, templateProblem, textSetting, TEMPLATE_KINDS } from "./whatsapp/textes.ts";
 import { parseAddress } from "./impression/imprimante.ts";
 import { parseLocalAddress } from "./reseau-local.ts";
-import { DEFAULT_TIERS, LOYALTY_LIMITS, tiersProblem } from "../shared/fidelite.ts";
+import { DEFAULT_TIERS, loyaltyLimits, tiersProblem } from "../shared/fidelite.ts";
 import { DEFAULT_INVOICE_PREFIX, isInvoicePrefix, normalizeInvoicePrefix } from "../shared/caisse.ts";
 import { prefixFrozenBy } from "./caisse/prefixe.ts";
+import { chargerDevise, deviseFigeePar } from "./devise.ts";
+import { DEVISE_DEFAUT, estCodeDevise } from "../shared/devises.ts";
 import type { Database, StorageBinding } from "./storage.ts";
+import { SEMAINE_DEFAUT, semaineProblem } from "../shared/horaires.ts";
 
 /**
  * Définition d'un réglage. `roles` : qui le lit et l'écrit ; `read` : qui le
@@ -28,6 +32,8 @@ type Def = {
   validate?: (v: unknown) => string | null;
   normalize?: (v: unknown) => unknown;
   frozen?: (db: Database) => { numero: string } | null;
+  /** Réglage écrit seulement par sa route dédiée (devise : `PUT /api/devise`, qui convertit le catalogue). */
+  dedicated?: true;
 };
 
 const text = (max: number) => (v: unknown) => (typeof v === "string" && v.length <= max ? null : coded("reglage.texte_long", { max }));
@@ -38,8 +44,10 @@ const minutes = (min: number, max: number) => (v: unknown) => (Number.isInteger(
 const hhmm = (v: unknown) => (typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? null : coded("reglage.heure"));
 
 /** Nombre entier borné, refus par la clé donnée (règle de la fidélité). */
-const whole = (min: number, max: number, key: "reglage.fidelite_tranche" | "reglage.fidelite_points") => (v: unknown) =>
-  (Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? null : coded(key));
+const whole = (limits: () => { min: number; max: number }, key: "reglage.fidelite_tranche" | "reglage.fidelite_points") => (v: unknown) => {
+  const { min, max } = limits();
+  return Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? null : coded(key, key === "reglage.fidelite_tranche" ? { min: montant(min), max: montant(max) } : {});
+};
 
 /** Textes des messages WhatsApp (sous-projet 7 § 3) : à la gérante seulement, jamais à l'administrateur. */
 const WHATSAPP_TEXTS: Record<string, Def> = Object.fromEntries(TEMPLATE_KINDS.flatMap((kind) => (["fr", "en"] as const).map((lang) => [
@@ -56,11 +64,35 @@ export function validateDriveRemote(v: unknown): string | null {
   return typeof v === "string" && DRIVE_REMOTE_PATTERN.test(v) ? null : coded("reglage.drive_format");
 }
 
+/** Texte d'accord sur les données (réservation en ligne) : 1 à 2 000 caractères. */
+const texteDonnees = (v: unknown) => (typeof v === "string" && v.trim() !== "" && v.length <= 2000 ? null : coded("reglage.en_ligne_texte"));
+
+/** Thème de la page du salon : trois champs gardés, couleurs en majuscules ; `null` revient à la charte de lama. */
+function normaliserTheme(v: unknown): unknown {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+  const t = v as Record<string, unknown>;
+  const haut = (x: unknown) => (typeof x === "string" ? x.toUpperCase() : x);
+  return { fond: haut(t.fond), accent: haut(t.accent), police: t.police };
+}
+
+function themeRefuse(v: unknown): string | null {
+  if (v === null) return null;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return coded("reglage.en_ligne_theme_couleur");
+  const probleme = problemeTheme(v as Record<string, unknown>);
+  return probleme ? coded(`reglage.en_ligne_theme_${probleme}` as MessageKey) : null;
+}
+
 export const SETTING_DEFS: Record<string, Def> = {
   "institut.nom": { roles: ["manager"], secret: false, default: "", validate: text(80) },
   "institut.adresse": { roles: ["manager"], secret: false, default: "", validate: text(200) },
   "institut.telephone": { roles: ["manager"], secret: false, default: "", validate: text(30) },
   "institut.langue": { roles: ["manager"], secret: false, default: "fr", validate: (v) => (v === "fr" || v === "en" ? null : coded("reglage.langue")) },
+  // Horaires d'ouverture (réservation en ligne, spec du 16/10/2026 § 4.1) : écrits par la gérante, lus par tous pour griser l'agenda.
+  "institut.horaires": { roles: ["manager"], read: ["admin", "reception", "practitioner"], secret: false, default: SEMAINE_DEFAUT, validate: (v) => (semaineProblem(v) ? coded("reglage.horaires") : null) },
+  // Devise (spec du 15/10/2026) : choisie à l'installation, changée par `PUT /api/devise` tant que rien ne la fige.
+  "institut.devise": { roles: ["admin", "manager"], secret: false, default: DEVISE_DEFAUT, validate: (v) => (estCodeDevise(v) ? null : coded("reglage.devise")), frozen: deviseFigeePar, dedicated: true },
+  "affichage.symbole_position": { roles: ["admin", "manager"], secret: false, default: null, validate: (v) => (v === null || v === "avant" || v === "apres" ? null : coded("reglage.symbole_position")) },
+  "affichage.symbole_ecran": { roles: ["admin", "manager"], secret: false, default: true, validate: yesNo },
   // Marque à l'écran (renommage lama) : « logo et nom » ou « logo seul » ; lue sans session par l'écran de connexion.
   // Marque en tête des documents (vague B) : « logo et nom » ou « logo seul » ; sans logo déposé, le nom reste en tête.
   "marque.documents": { roles: ["manager"], secret: false, default: "logo_nom", validate: (v) => (v === "logo_nom" || v === "logo" ? null : coded("reglage.marque")) },
@@ -100,6 +132,19 @@ export const SETTING_DEFS: Record<string, Def> = {
   "relances.absence": { roles: ["manager"], secret: false, default: false, validate: yesNo },
   "relances.absence_jours": { roles: ["manager"], secret: false, default: 60, validate: days(15, 365) },
   "relances.heure": { roles: ["manager"], secret: false, default: "10:00", validate: hhmm },
+  // Réservation en ligne (spec du 16/10/2026 § 4.6, § 9.4) : désactivée par défaut ; liaison (salon, clé) à l'administrateur.
+  "en_ligne.active": { roles: ["manager"], read: ["admin"], secret: false, default: false, validate: yesNo },
+  "en_ligne.horizon_jours": { roles: ["manager"], secret: false, default: 30, validate: days(7, 92) },
+  "en_ligne.delai_minimal_heures": {
+    roles: ["manager"], secret: false, default: 2,
+    validate: (v) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 168 ? null : coded("reglage.en_ligne_delai", { min: 0, max: 168 })),
+  },
+  "en_ligne.texte_donnees.fr": { roles: ["manager"], secret: false, default: TEXTE_DONNEES.fr, validate: texteDonnees },
+  "en_ligne.texte_donnees.en": { roles: ["manager"], secret: false, default: TEXTE_DONNEES.en, validate: texteDonnees },
+  "en_ligne.adresse": { roles: ["manager"], read: ["admin"], secret: false, default: "", validate: (v) => (adresseRelaisValide(v) ? null : coded("reglage.en_ligne_adresse")) },
+  "en_ligne.theme": { roles: ["manager"], secret: false, default: null, normalize: normaliserTheme, validate: themeRefuse },
+  "en_ligne.salon": { roles: ["admin"], read: ["manager"], secret: false, default: "", validate: (v) => (typeof v === "string" && (v === "" || MOTIF_SALON.test(v)) ? null : coded("reglage.en_ligne_salon")) },
+  "en_ligne.cle": { roles: ["admin"], secret: true, default: null, validate: (v) => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? null : coded("reglage.en_ligne_cle")) },
   ...WHATSAPP_TEXTS,
   // Caisse (sous-projet 5 § 5.2) : lus par la vente dès la vague 1, rubrique « Caisse » des Réglages en vague 2.
   "institut.niu": { roles: ["manager"], secret: false, default: "", validate: text(40) },
@@ -139,13 +184,14 @@ export const SETTING_DEFS: Record<string, Def> = {
   "caisse.mentions_en": { roles: ["manager"], secret: false, default: "", validate: text(500) },
   // Fidélité (mini CRM § 2) : désactivée par défaut ; règle de gain et paliers de récompense, gérante seulement.
   "fidelite.active": { roles: ["manager"], secret: false, default: false, validate: yesNo },
-  "fidelite.tranche": { roles: ["manager"], secret: false, default: 1000, validate: whole(LOYALTY_LIMITS.tranche.min, LOYALTY_LIMITS.tranche.max, "reglage.fidelite_tranche") },
-  "fidelite.points": { roles: ["manager"], secret: false, default: 1, validate: whole(LOYALTY_LIMITS.points.min, LOYALTY_LIMITS.points.max, "reglage.fidelite_points") },
+  "fidelite.tranche": { roles: ["manager"], secret: false, default: 1000, validate: whole(() => loyaltyLimits().tranche, "reglage.fidelite_tranche") },
+  "fidelite.points": { roles: ["manager"], secret: false, default: 1, validate: whole(() => loyaltyLimits().points, "reglage.fidelite_points") },
   "fidelite.paliers": {
     roles: ["manager"], secret: false, default: DEFAULT_TIERS.map((tier) => ({ ...tier })),
     validate: (v) => {
+      const L = loyaltyLimits();
       const problem = tiersProblem(v);
-      return problem ? coded(problem) : null;
+      return problem ? coded(problem, problem === "reglage.paliers_montant" ? { min: montant(L.tierMontant.min), max: montant(L.tierMontant.max) } : {}) : null;
     },
   },
 };
@@ -185,7 +231,7 @@ export async function setSetting(name: string, value: unknown, accountId: number
 }
 
 /** Écrit un réglage non secret dans la transaction ouverte par l'appelant (même requête que `setSetting`). */
-function writeSettingNow(db: Database, name: string, value: unknown, accountId: number, now: number): void {
+export function writeSettingNow(db: Database, name: string, value: unknown, accountId: number, now: number): void {
   db.prepare(
     `INSERT INTO settings (key, value, secret, updated_at, updated_by) VALUES (?, ?, 0, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, secret = excluded.secret, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
@@ -220,6 +266,7 @@ export function mountSettingsRoutes(app: OpenAPIHono<any>): void {
     const def = SETTING_DEFS[name];
     if (!def) return c.json({ error: msg(c, "reglage.inconnu") }, 404);
     if (!def.roles.includes(account.role)) return c.json({ error: msg(c, "acces.refuse") }, 403);
+    if (def.dedicated) return c.json({ error: msg(c, "devise.route") }, 409);
     if (def.secret || account.role === "admin") {
       const refused = requireConfirmation(c);
       if (refused) return refused;
@@ -243,6 +290,7 @@ export function mountSettingsRoutes(app: OpenAPIHono<any>): void {
     } else {
       await setSetting(name, value, account.id, nowOf(c));
     }
+    if (name.startsWith("affichage.")) await chargerDevise();
     await logAudit({ accountId: account.id, action: "reglage", target: name, ip: clientIp(c), now: nowOf(c) });
     return c.json({ ok: true });
   });

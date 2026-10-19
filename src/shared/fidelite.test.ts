@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_TIERS, nextTier, pointsFor, reachableTiers, reprisePoints, tiersProblem } from "./fidelite.ts";
+import { DEFAULT_TIERS, nextTier, loyaltyLimits, pointsFor, reachableTiers, reprisePoints, tiersProblem } from "./fidelite.ts";
+import { definirDevise } from "./devise-active.ts";
 
 /** Règles de la fidélité (mini CRM § 2, décisions 12, 13, 17), communes à l'écran et au serveur. */
 
@@ -47,4 +48,19 @@ test("paliers réglés : 1 à 5, points de 1 à 100 000 strictement croissants, 
   assert.equal(tiersProblem([{ points: 100, montant: 50 }]), "reglage.paliers_montant");
   assert.equal(tiersProblem([{ points: 100, montant: 5000 }, { points: 100, montant: 6000 }]), "reglage.paliers_ordre");
   assert.equal(tiersProblem([null]), "reglage.paliers_points");
+});
+
+test("bornes de la fidélité : XAF inchangé, euro en centimes", () => {
+  assert.deepEqual(loyaltyLimits(0).tranche, { min: 100, max: 1_000_000 });
+  assert.deepEqual(loyaltyLimits(0).tierMontant, { min: 100, max: 10_000_000 });
+  assert.deepEqual(loyaltyLimits(2).tranche, { min: 100, max: 100_000_000 });
+  assert.equal(tiersProblem([{ points: 100, montant: 50_000_000 }]), "reglage.paliers_montant"); // 50 000 000 F : au-delà de la borne du FCFA
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.deepEqual(loyaltyLimits().tierMontant, { min: 100, max: 1_000_000_000 });
+    assert.equal(tiersProblem([{ points: 100, montant: 50_000_000 }]), null); // 500 000,00 € de remise : dans les bornes de l'euro
+    assert.equal(pointsFor(2599, { tranche: 1000, points: 1 }), 2);     // 25,99 € par tranches de 10 €
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
 });

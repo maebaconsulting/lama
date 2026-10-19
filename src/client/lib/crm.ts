@@ -7,7 +7,7 @@
 import { CARD_FORMAT, normalizeCard } from "../../shared/carte.ts";
 import { LOCALES, translate, translatePlural, type Lang } from "../i18n/translate.ts";
 import { fold } from "./bilingual.ts";
-import { formatAmount, formatPrice, formatShortDate } from "./format.ts";
+import { formatEntier, formatPrice, formatShortDate } from "./format.ts";
 import type { ClientSummary, TagCount } from "../types.ts";
 
 /** Seuil d'absence mis en avant par défaut (décision 6) ; la vague 3 lit `relances.absence_jours`. */
@@ -142,7 +142,7 @@ export function keyFigures(summary: Pick<ClientSummary, "visits" | "total_spent"
   const figures: KeyFigure[] = [{ id: "visits", value: String(summary.visits), label: translate(lang, "crm.chiffre.visites") }];
   if (summary.total_spent !== undefined) figures.push({ id: "spent", value: formatPrice(summary.total_spent, lang), label: translate(lang, "crm.chiffre.total") });
   if (summary.average_basket !== undefined) figures.push({ id: "basket", value: formatPrice(summary.average_basket, lang), label: translate(lang, "crm.chiffre.panier") });
-  if (summary.loyalty) figures.push({ id: "points", value: formatAmount(summary.loyalty.balance, lang), label: translate(lang, "fidelite.points_tuile") });
+  if (summary.loyalty) figures.push({ id: "points", value: formatEntier(summary.loyalty.balance), label: translate(lang, "fidelite.points_tuile") });
   return figures;
 }
 

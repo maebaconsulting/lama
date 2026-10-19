@@ -22,6 +22,8 @@ const FICHIERS: { method: string; path: RegExp }[] = [
   // Photo d'un produit : ni dépôt ni retrait.
   { method: "PUT", path: /^\/api\/products\/[^/]+\/image\/?$/ },
   { method: "DELETE", path: /^\/api\/products\/[^/]+\/image\/?$/ },
+  // Fichier d'un import : ni aperçu ni import (le modèle se télécharge).
+  { method: "POST", path: /^\/api\/import\/[^/]+(\/apercu)?\/?$/ },
 ];
 
 /** Vrai si la route envoie ou retire un fichier (refusée dans la démonstration publique). */

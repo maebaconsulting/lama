@@ -70,20 +70,26 @@ export function colleaguesOf(db: Database, fromStaffId: number): StaffRef[] {
 }
 
 /**
- * Occupation d'une praticienne un jour donné : rendez-vous non annulés et
- * créneaux bloqués. `excludeAppointmentId` : le rendez-vous que l'on déplace,
- * qui ne se gêne pas lui-même (V1-01).
+ * Occupation d'une praticienne un jour donné : rendez-vous non annulés,
+ * créneaux bloqués, et demandes en ligne à confirmer dont elle est la
+ * praticienne retenue (réservation en ligne, spec § 4.4). `excludeAppointmentId` :
+ * le rendez-vous que l'on déplace, qui ne se gêne pas lui-même (V1-01) ;
+ * `excludeDemandeId` : la demande que l'on confirme ou déplace.
  */
-export function busyOn(db: Database, staffId: number, date: string, excludeAppointmentId?: number): Busy[] {
+export function busyOn(db: Database, staffId: number, date: string, excludeAppointmentId?: number, excludeDemandeId?: number): Busy[] {
   const appts = db.prepare(
     `SELECT a.start_time, a.end_time, cl.name AS client_name FROM appointments a LEFT JOIN clients cl ON cl.id = a.client_id
       WHERE a.staff_id = ? AND a.scheduled_date = ? AND a.status != 'cancelled' AND a.id != ?`,
   ).all(staffId, date, excludeAppointmentId ?? 0) as { start_time: string; end_time: string; client_name: string | null }[];
   const blocks = db.prepare("SELECT start_time, end_time, reason FROM blocked_slots WHERE staff_id = ? AND blocked_date = ?")
     .all(staffId, date) as { start_time: string; end_time: string; reason: string | null }[];
+  const demandes = db.prepare(
+    "SELECT start_time, end_time, cliente_nom FROM demandes_en_ligne WHERE staff_id = ? AND date = ? AND etat = 'a_confirmer' AND id != ?",
+  ).all(staffId, date, excludeDemandeId ?? 0) as { start_time: string; end_time: string; cliente_nom: string }[];
   return [
     ...appts.map((a): Busy => ({ kind: "appointment", start_time: a.start_time, end_time: a.end_time, label: a.client_name || "" })),
     ...blocks.map((b): Busy => ({ kind: "blocked", start_time: b.start_time, end_time: b.end_time, label: b.reason || "" })),
+    ...demandes.map((d): Busy => ({ kind: "demande", start_time: d.start_time, end_time: d.end_time, label: d.cliente_nom })),
   ];
 }
 

@@ -19,11 +19,22 @@ const RULES: Rule[] = [
   { methods: ["GET"], path: /^\/api\/(appointments|calendar)(\/|$)/, roles: BUSINESS },
   { methods: ["POST"], path: /^\/api\/appointments\/\d+\/notes$/, roles: BUSINESS },
   { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/appointments(\/\d+)?$/, roles: FRONT },
+  // Suppléments (spec du 18/10/2026 § 3) : ceux d'un rendez-vous comme sa modification (gérante et réception) ;
+  // la liste des suppléments possibles d'une prestation et sa copie, comme le catalogue (gérante).
+  { methods: ["PUT"], path: /^\/api\/appointments\/\d+\/supplements$/, roles: FRONT },
+  { methods: ["PUT"], path: /^\/api\/services\/\d+\/supplements$/, roles: MANAGER },
+  { methods: ["POST"], path: /^\/api\/services\/\d+\/supplements\/copie$/, roles: MANAGER },
   { methods: ["DELETE"], path: /^\/api\/notes\/\d+$/, roles: FRONT },
   { methods: ["POST", "DELETE"], path: /^\/api\/blocked-slots(\/\d+)?$/, roles: FRONT },
   // Transfert des rendez-vous d'une praticienne absente (spec du 04/10/2026, décision 13) : gérante et réception.
   { methods: ["GET"], path: /^\/api\/transfers\/proposal$/, roles: FRONT },
   { methods: ["POST"], path: /^\/api\/transfers$/, roles: FRONT },
+  // Réservation en ligne (spec du 16/10/2026 § 4.4 à 4.6) : demandes à la réception et à la gérante ; l'agenda aussi à la
+  // praticienne (sans nom) ; état et essai de la liaison à la gérante et à l'administrateur ; QR code à la gérante.
+  { methods: ["GET"], path: /^\/api\/demandes-en-ligne\/agenda$/, roles: BUSINESS },
+  { methods: ["GET", "POST"], path: /^\/api\/demandes-en-ligne(\/|$)/, roles: FRONT },
+  { methods: ["GET", "POST"], path: /^\/api\/en-ligne\/(etat|tester)$/, roles: LEADS },
+  { methods: ["GET"], path: /^\/api\/en-ligne\/qr$/, roles: MANAGER },
   // Fidélité (mini CRM § 2) : solde et écritures pour la réception et la gérante ; correction par la gérante seule.
   { methods: ["GET"], path: /^\/api\/clients\/[^/]+\/loyalty$/, roles: FRONT },
   { methods: ["POST"], path: /^\/api\/clients\/[^/]+\/loyalty$/, roles: MANAGER },
@@ -37,12 +48,18 @@ const RULES: Rule[] = [
   { methods: ["PUT", "DELETE"], path: /^\/api\/products\/\d+\/image$/, roles: MANAGER },
   // Produit recommandé par WhatsApp : texte prérempli et envoi, réception et gérante (jamais l'administrateur, qui ne voit pas les textes).
   { methods: ["GET", "POST"], path: /^\/api\/products\/[^/]+\/whatsapp$/, roles: FRONT },
+  // Horaires de l'institut (réservation en ligne, § 4.1) : lus par les rôles métier pour griser l'agenda.
+  { methods: ["GET"], path: /^\/api\/horaires$/, roles: BUSINESS },
   { methods: ["GET"], path: /^\/api\/(staff|services|products)(\/|$)/, roles: BUSINESS },
   { methods: ["PUT"], path: /^\/api\/products\/\d+$/, roles: FRONT },
   { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/(staff|services|products)(\/\d+)?$/, roles: MANAGER },
   { methods: "*", path: /^\/api\/accounts(\/|$)/, roles: LEADS },
   { methods: "*", path: /^\/api\/devices(\/|$)/, roles: LEADS },
+  // Import de données (spec du 18/10/2026 § 2.1) : modèles, aperçu et import à la gérante et à l'administrateur.
+  { methods: ["GET"], path: /^\/api\/import\/[^/]+\/modele$/, roles: LEADS },
+  { methods: ["POST"], path: /^\/api\/import\/[^/]+(\/apercu)?$/, roles: LEADS },
   { methods: "*", path: /^\/api\/settings(\/|$)/, roles: LEADS },
+  { methods: "*", path: /^\/api\/devise$/, roles: LEADS },
   { methods: "*", path: /^\/api\/outbox(\/|$)/, roles: ["admin", "manager", "reception"] },
   { methods: ["GET"], path: /^\/api\/backups\/status$/, roles: LEADS },
   { methods: "*", path: /^\/api\/backups(\/|$)/, roles: ADMIN },
@@ -147,6 +164,15 @@ export function redactAppointment(role: Role, appointment: Record<string, unknow
   if (Array.isArray(rest.appointment_services)) {
     rest.appointment_services = rest.appointment_services.map((svc: Record<string, unknown>) => {
       const { price: _price, ...kept } = svc;
+      // Suppléments (spec du 18/10/2026 § 3.3) : libellés et minutes gardés ; le prix d'un article du catalogue
+      // retiré, celui d'un supplément libre gardé (l'encaissement par la praticienne en a besoin, il n'est nulle part ailleurs).
+      if (Array.isArray(kept.supplements)) {
+        kept.supplements = kept.supplements.map((s: Record<string, unknown>) => {
+          if (s.kind === "libre") return s;
+          const { price: _p, ...sans } = s;
+          return sans;
+        });
+      }
       return kept;
     });
   }

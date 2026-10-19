@@ -98,3 +98,38 @@ test("grille : l'échec du retrait d'un créneau bloqué remonte dans le bandeau
   assert.match(grille, /deleteBlockedSlot\(aRetirer\.id\)\.catch\(\(err: Error\) => setError\(err\.message\)\)/);
   assert.match(grille, /const \{ openPanel, deleteBlockedSlot, setError, selectedAppointment \} = useApp\(\);/);
 });
+
+test("heures fermées grisées sous les rendez-vous, sans bloquer le toucher d'un créneau", () => {
+  assert.match(grille, /fermees\(column\)\.map\(/);
+  assert.match(grille, /pointer-events-none absolute left-0 right-0 bg-muted/);
+  const vue = read("../calendar-view.tsx");
+  assert.match(vue, /api<\{ institut: Semaine \}>\("GET", "\/api\/horaires"\)/);
+  assert.match(vue, /heuresFermees\(/);
+});
+
+test("grille : demandes en ligne à confirmer hachurées dans la colonne de la praticienne retenue ; « Réservé » pour la praticienne", () => {
+  assert.match(grille, /demandes\.filter\(\(d\) => inColumn\(column, d\.staff_id\)\)/);
+  const bloc = grille.slice(grille.indexOf("if (item.demande) {"), grille.indexOf("const apt = item.appointment!;"));
+  assert.match(bloc, /className="hachure absolute z-20/);
+  assert.match(bloc, /\{t\("agenda\.en_ligne_a_confirmer"\)\}/);
+  assert.match(bloc, /d\.sans_preference \? ` · \$\{t\("agenda\.a_attribuer"\)\}` : ""/);
+  assert.match(bloc, /\{t\("agenda\.reserve"\)\}/);
+  assert.match(bloc, /onClick=\{onDemande\}/);
+  assert.match(readFileSync(new URL("../../styles.css", import.meta.url), "utf8"), /\.hachure \{[^}]*repeating-linear-gradient/);
+});
+
+test("carte hachurée courte (demande de 30 min) : une seule ligne, comme un rendez-vous de même durée", () => {
+  const bloc = grille.slice(grille.indexOf("if (item.demande) {"), grille.indexOf("const apt = item.appointment!;"));
+  assert.match(bloc, /const lignes = blockLines\(hauteur\);/, "même règle que les rendez-vous");
+  assert.match(bloc, /lignes === 1 \? \(/);
+  assert.match(bloc, /<span className="min-w-0 truncate font-medium">\{d\.cliente_nom\}/, "la cliente d'abord");
+  assert.match(bloc, /<span className="shrink-0 whitespace-nowrap">· \{t\("agenda\.en_ligne_a_confirmer"\)\}<\/span>/, "l'état jamais coupé");
+});
+
+test("agenda : demandes en ligne demandées une fois par jour affiché, réponse d'un autre jour ignorée", () => {
+  const vue = read("../calendar-view.tsx");
+  assert.doesNotMatch(vue, /useEffect\(\(\) => \{ void enLigne\.reload\(\); \}, \[calendarDate\]\)/, "plus de double requête au montage");
+  assert.match(vue, /if \(date === jourAffiche\.current\) setEnLigne\(\{ date, demandes: r\.demandes \}\);/);
+  assert.match(vue, /demandes=\{enLigne\?\.date === calendarDate \? enLigne\.demandes : \[\]\}/);
+  assert.match(vue, /useRefresh\(\["demandes", "calendar"\]/);
+});

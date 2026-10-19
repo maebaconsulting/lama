@@ -4,7 +4,9 @@
  * langue du document et avec ses valeurs figées. Module pur, testé sous Node ;
  * `ticket-pdf.ts` ne fait que dessiner ces rangées.
  */
-import { formatFrancs, formatFrancsDocument, type PaymentMethod } from "../../shared/caisse.ts";
+import { type PaymentMethod } from "../../shared/caisse.ts";
+import { formatEntier, formatMontantDocument } from "../../shared/montants.ts";
+import { orderedLines } from "../../shared/supplements.ts";
 import type { TicketLoyalty } from "../crm/fidelite.ts";
 import { message, type Lang, type MessageKey } from "../messages.ts";
 import { marquerFormation } from "../formation/marque.ts";
@@ -27,6 +29,9 @@ export interface TicketFiscal {
 }
 
 export interface TicketLine {
+  /** Identifiant de la ligne et celui de sa prestation pour un supplément (spec du 18/10/2026 § 3.5). */
+  id?: number;
+  parent_line_id?: number | null;
   label_fr: string;
   label_en: string;
   quantity: number;
@@ -34,6 +39,9 @@ export interface TicketLine {
   line_total: number;
   staff_name: string | null;
 }
+
+/** Retrait d'un supplément sous sa prestation : deux espaces insécables et « + », sur le PDF comme sur le papier. */
+export const SUPPLEMENT_PREFIX = "\u00a0\u00a0+\u00a0";
 
 export interface TicketPayment {
   method: PaymentMethod;
@@ -152,8 +160,6 @@ function rate(value: number, lang: Lang): string {
   return new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-GB", { maximumFractionDigits: 2 }).format(value);
 }
 
-const money = formatFrancsDocument;
-
 /** Motif de remise stocké (`fidelite`, `geste`, `autre:texte`) écrit dans la langue du ticket. */
 export function discountReasonText(reason: string, lang: Lang): string {
   if (reason === "fidelite" || reason === "geste") return message(lang, `ticket.motif.${reason}` as MessageKey);
@@ -171,6 +177,7 @@ const TITLES: Record<TicketKind, MessageKey> = { invoice: "ticket.facture", cred
 /** Rangées du ticket, de l'en-tête au pied (§ 5.1), textes rendus imprimables. */
 export function ticketRows(doc: TicketDocument, options: { logo?: boolean } = {}): TicketRow[] {
   const lang = doc.lang;
+  const money = (n: number) => formatMontantDocument(n, lang);
   const t = (key: MessageKey, values?: Record<string, string | number>) => message(lang, key, values);
   const f = doc.fiscal;
   const rows: TicketRow[] = [];
@@ -202,11 +209,18 @@ export function ticketRows(doc: TicketDocument, options: { logo?: boolean } = {}
   if (doc.kind === "credit_note" && doc.reason) text(t("ticket.motif", { motif: doc.reason }), "detail", "center");
   rows.push({ type: "rule" });
 
-  // Lignes : désignation dans la langue du ticket, quantité, prix, praticienne.
-  for (const line of doc.lines) {
+  // Lignes : désignation dans la langue du ticket, quantité, prix, praticienne ; chaque supplément en retrait
+  // sous sa prestation, avec son prix (spec du 18/10/2026 § 3.5), sa quantité seulement si elle dépasse 1.
+  const numbered = doc.lines.map((line, i) => ({ ...line, id: line.id ?? -(i + 1) }));
+  for (const line of orderedLines(numbered)) {
     const label = (lang === "en" ? line.label_en : line.label_fr) || line.label_fr;
-    pair(label, money(line.line_total));
     const detail = t("ticket.quantite", { quantite: line.quantity, prix: money(line.unit_price) });
+    if (line.supplement) {
+      pair(`${SUPPLEMENT_PREFIX}${label}`, money(line.line_total));
+      if (line.quantity > 1) text(`${SUPPLEMENT_PREFIX}${detail}`, "detail");
+      continue;
+    }
+    pair(label, money(line.line_total));
     text(line.staff_name ? `${detail} · ${line.staff_name}` : detail, "detail");
   }
   if (doc.lines.length) rows.push({ type: "rule" });
@@ -247,12 +261,12 @@ export function ticketRows(doc: TicketDocument, options: { logo?: boolean } = {}
     const points = (n: number) => {
       const abs = Math.abs(n);
       const one = lang === "fr" ? abs < 2 : abs === 1;
-      return `${n < 0 ? "\u2212" : ""}${t(one ? "ticket.point" : "ticket.points", { nombre: formatFrancs(abs) })}`;
+      return `${n < 0 ? "\u2212" : ""}${t(one ? "ticket.point" : "ticket.points", { nombre: formatEntier(abs) })}`;
     };
     rows.push({ type: "rule" });
     if (loyalty.reward > 0) pair(t("ticket.recompense"), `\u2212${points(loyalty.reward)}`);
-    if (loyalty.earned > 0) pair(t("ticket.points_gagnes"), `+${formatFrancs(loyalty.earned)}`);
-    if (loyalty.taken > 0) pair(t("ticket.points_repris"), `\u2212${formatFrancs(loyalty.taken)}`);
+    if (loyalty.earned > 0) pair(t("ticket.points_gagnes"), `+${formatEntier(loyalty.earned)}`);
+    if (loyalty.taken > 0) pair(t("ticket.points_repris"), `\u2212${formatEntier(loyalty.taken)}`);
     if (loyalty.restored > 0) pair(t("ticket.points_rendus"), `+${points(loyalty.restored)}`);
     pair(t("ticket.solde_fidelite"), points(loyalty.balance));
   }

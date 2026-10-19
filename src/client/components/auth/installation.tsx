@@ -3,7 +3,10 @@ import { api } from "../../api";
 import { newAccountProblem } from "../../lib/forms";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Champ, Erreur } from "../champ";
+import { SELECT } from "../reglages/elements";
+import { CODES_DEVISES, DEVISES, DEVISE_DEFAUT, type CodeDevise } from "../../../shared/devises";
 import { Couverture } from "./couverture";
 import { useFormation } from "../../formation-context";
 
@@ -12,6 +15,7 @@ export function Installation({ onDone }: { onDone: () => Promise<void> }) {
   const { t, lang } = useI18n();
   const formation = useFormation();
   const [form, setForm] = useState({ display_name: "", login: "", password: "", confirmation: "" });
+  const [devise, setDevise] = useState<CodeDevise>(DEVISE_DEFAUT);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const set = (key: keyof typeof form) => (e: Event) => setForm((f) => ({ ...f, [key]: (e.currentTarget as HTMLInputElement).value }));
@@ -24,7 +28,7 @@ export function Installation({ onDone }: { onDone: () => Promise<void> }) {
     setPending(true);
     setError(null);
     try {
-      await api("POST", "/api/auth/install", { display_name: form.display_name.trim(), login: form.login.trim(), password: form.password, language: lang });
+      await api("POST", "/api/auth/install", { display_name: form.display_name.trim(), login: form.login.trim(), password: form.password, language: lang, devise });
       await onDone();
     } catch (err) {
       setForm((f) => ({ ...f, password: "", confirmation: "" }));
@@ -49,6 +53,13 @@ export function Installation({ onDone }: { onDone: () => Promise<void> }) {
         <Champ id="identifiant" label={t("connexion.identifiant")} autoComplete="username" autoCapitalize="none" spellcheck={false} value={form.login} onInput={set("login")} />
         <Champ id="mot-de-passe" type="password" label={t("installation.mot_de_passe")} autoComplete="new-password" value={form.password} onInput={set("password")} />
         <Champ id="confirmation" type="password" label={t("compte.mot_de_passe_bis")} autoComplete="new-password" value={form.confirmation} onInput={set("confirmation")} />
+        <div className="space-y-1.5">
+          <Label htmlFor="devise">{t("installation.devise")}</Label>
+          <select id="devise" className={SELECT} value={devise} onChange={(e) => setDevise((e.currentTarget as HTMLSelectElement).value as CodeDevise)}>
+            {CODES_DEVISES.map((code) => <option key={code} value={code}>{`${DEVISES[code].nom[lang]} (${code})`}</option>)}
+          </select>
+          <p className="text-sm text-muted-foreground">{t("installation.devise_aide")}</p>
+        </div>
         <Erreur message={error} />
         <Button type="submit" className="w-full" disabled={pending}>{pending ? t("installation.en_cours") : t("installation.bouton")}</Button>
       </form>

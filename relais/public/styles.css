@@ -1,0 +1,98 @@
+/*
+ * Page de réservation : charte de lama (carnet de cuir et pages d'ivoire), pensée pour le téléphone.
+ * Couleurs en variables, seulement ici : un salon qui publie un thème les remplace, posées par le serveur dans
+ * la page (relais/noyau/theme.ts) ; sa police est choisie par `data-police` sur <html>.
+ */
+:root {
+  --fond: #F3EEE4;
+  --texte: #161514;
+  --accent: #161514;
+  --sur-accent: #F3EEE4;
+  --papier: #FBF9F4;
+  --encre-grise: #6E6A64;
+  --filet: #D8D1C4;
+  --encre-rouge: #7A1F1F;
+  --vert-confirme: #3F5E4A;
+  --font-marque: "Cormorant Garamond", Georgia, serif;
+  --font-serif: "EB Garamond", Georgia, serif;
+  --font-sans: "Jost", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+/* Polices d'un thème (contrat v1, spec § 9.3) ; « lama » garde la charte. */
+html[data-police="classique"] { --font-marque: "EB Garamond", Georgia, serif; }
+html[data-police="elegante"] { --font-marque: "Cinzel", "EB Garamond", Georgia, serif; --font-serif: "Cinzel", "EB Garamond", Georgia, serif; --font-sans: "EB Garamond", Georgia, serif; }
+html[data-police="moderne"] { --font-marque: "Jost", system-ui, sans-serif; --font-serif: "Jost", system-ui, sans-serif; }
+/* Cinzel (licence OFL, polices/OFL-Cinzel.txt) : regroupée par Vite dans /assets, servie par le relais, jamais par un service tiers. */
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("./polices/cinzel-latin-500-normal.woff2") format("woff2"); }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--fond); color: var(--texte); font-family: var(--font-sans); font-size: 16px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+.page { max-width: 34rem; margin: 0 auto; padding: 16px 16px 48px; }
+.entete { display: flex; align-items: center; gap: 12px; padding: 8px 0 16px; border-bottom: 1px solid var(--filet); margin-bottom: 16px; }
+.entete > div { flex: 1; min-width: 0; }
+.logo { width: 48px; height: 48px; object-fit: contain; }
+.marque { font-family: var(--font-marque); font-weight: 300; font-size: 1.75rem; letter-spacing: 0.08em; line-height: 1.1; margin: 0; overflow-wrap: anywhere; }
+.sous-titre-entete { margin: 2px 0 0; color: var(--encre-grise); font-size: 0.875rem; }
+.langue { background: none; border: 1px solid var(--filet); border-radius: 2px; padding: 6px 10px; font: inherit; font-size: 0.875rem; color: var(--texte); cursor: pointer; }
+.titre:focus { outline: none; }
+.titre { font-family: var(--font-serif); font-weight: 500; font-size: 1.375rem; margin: 8px 0 12px; }
+.sous-titre { font-family: var(--font-serif); font-weight: 500; font-size: 1.0625rem; margin: 20px 0 8px; }
+.categorie { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--encre-grise); font-weight: 500; margin: 20px 0 6px; }
+.liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ligne { width: 100%; text-align: left; display: grid; gap: 2px; background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; padding: 12px 14px; font: inherit; color: inherit; cursor: pointer; }
+.ligne:hover { border-color: var(--accent); }
+.ligne-haut { display: flex; justify-content: space-between; gap: 12px; }
+.ligne-nom { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.ligne-prix { font-family: var(--font-serif); white-space: nowrap; font-variant-numeric: oldstyle-nums proportional-nums; }
+.ligne-detail, .ligne-description, .discret, .rappel-choix, .donnees { color: var(--encre-grise); font-size: 0.875rem; }
+.rappel-choix { margin: -4px 0 12px; }
+.filtre, .champ { display: grid; gap: 4px; margin: 12px 0; font-size: 0.875rem; }
+.filtre { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+select, input[type="text"], input[type="tel"], input[type="password"], textarea { width: 100%; font: inherit; font-size: 1rem; color: var(--texte); background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; padding: 10px 12px; }
+select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.puces { display: flex; flex-wrap: wrap; gap: 8px; }
+.puce { background: var(--papier); border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; font: inherit; font-size: 0.875rem; color: var(--texte); cursor: pointer; }
+.bandeau { display: flex; gap: 6px; overflow-x: auto; margin: 16px -16px 0; padding: 4px 16px 8px; scroll-snap-type: x proximity; }
+.jour { flex: 0 0 auto; width: 58px; display: grid; justify-items: center; padding: 8px 0; background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; font: inherit; color: var(--texte); cursor: pointer; scroll-snap-align: start; }
+.jour:disabled { color: var(--encre-grise); opacity: 0.55; background: transparent; text-decoration: line-through; cursor: default; }
+.jour-choisi { background: var(--accent); color: var(--sur-accent); border-color: var(--accent); }
+.jour-nom, .jour-mois { font-size: 0.75rem; }
+.jour-numero { font-family: var(--font-serif); font-size: 1.25rem; line-height: 1.2; }
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.heure { padding: 10px 0; background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; font: inherit; color: var(--texte); cursor: pointer; font-variant-numeric: tabular-nums; }
+.heure:hover { border-color: var(--accent); }
+.lien { display: block; margin: 24px 0 0; background: none; border: 0; padding: 0; font: inherit; color: var(--texte); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left; }
+.retour { background: none; border: 0; padding: 0; margin-bottom: 4px; font: inherit; font-size: 0.875rem; color: var(--encre-grise); cursor: pointer; }
+.bouton { display: block; width: 100%; margin-top: 20px; padding: 14px; background: var(--accent); color: var(--sur-accent); border: 0; border-radius: 2px; font: inherit; font-weight: 500; text-align: center; text-decoration: none; cursor: pointer; }
+.bouton:disabled { opacity: 0.6; cursor: default; }
+.bouton-secondaire { display: inline-block; background: none; border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; font: inherit; color: var(--texte); text-decoration: none; cursor: pointer; }
+.choix-praticienne { display: grid; gap: 8px; }
+.option { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; cursor: pointer; }
+.option input { accent-color: var(--accent); }
+.option-choisie { border-color: var(--accent); }
+.photo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
+.photo-vide { display: grid; place-items: center; background: var(--fond); border: 1px solid var(--filet); font-family: var(--font-serif); }
+.ligne-seule { font-family: var(--font-serif); font-size: 1.125rem; }
+.case { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0; font-size: 0.9375rem; }
+.case input { margin-top: 3px; width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
+.cases { border: 0; padding: 0; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cases legend { font-size: 0.875rem; margin-bottom: 6px; padding: 0; }
+.case-pastille { position: relative; }
+.case-pastille input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.case-pastille span { display: inline-block; padding: 8px 12px; border: 1px solid var(--filet); border-radius: 2px; background: var(--papier); }
+.case-jour span { text-transform: capitalize; }
+.case-pastille input:checked + span { background: var(--accent); color: var(--sur-accent); border-color: var(--accent); }
+.case-pastille input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.avis { padding: 10px 12px; margin: 12px 0; border: 1px solid var(--filet); border-radius: 2px; background: var(--papier); font-size: 0.9375rem; }
+.avis p { margin: 0 0 8px; }
+.avis > :last-child { margin-bottom: 0; }
+.avis-erreur { border-color: var(--encre-rouge); color: var(--encre-rouge); }
+.avis-erreur .bouton-secondaire { border-color: var(--encre-rouge); color: var(--encre-rouge); }
+.piege { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.recu, .ferme, .suivi { text-align: center; padding-top: 24px; }
+.recu .lien, .suivi .lien { text-align: center; margin: 24px auto 0; }
+.suivi-prestation { font-weight: 500; margin: 0 0 4px; }
+.etat { font-family: var(--font-serif); font-size: 1.25rem; margin: 16px 0; }
+.etat-confirmee { color: var(--vert-confirme); }
+.etat-refusee { color: var(--encre-rouge); }
+.message { text-align: left; background: var(--papier); border: 1px solid var(--filet); border-radius: 2px; padding: 12px; }

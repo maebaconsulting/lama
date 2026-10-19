@@ -1,6 +1,7 @@
 /**
  * Routes de l'impression directe (spec du 03/10/2026, § 1 et § 2) : imprimer
- * un document, ouvrir le tiroir-caisse, imprimer un ticket de test. Une panne
+ * un document (facture, avoir, reçu d'acompte ou ticket de clôture), ouvrir le
+ * tiroir-caisse, imprimer un ticket de test. Une panne
  * d'imprimante répond 409 avec sa raison traduite, jamais une erreur 5xx (que
  * l'écran prendrait pour une réponse perdue).
  */
@@ -16,7 +17,7 @@ import { getSetting } from "../settings.ts";
 import type { StorageBinding } from "../storage.ts";
 import { OPEN_DRAWER, ticketBytes } from "./escpos.ts";
 import { exclusive, sendToPrinter, type PrintFailure } from "./imprimante.ts";
-import { PRINT_KINDS, paperLogo, printDocument, type PrintKind } from "./documents.ts";
+import { PRINT_KINDS, paperLogo, printClosing, printDocument, type PrintKind } from "./documents.ts";
 import { marquerFormation } from "../formation/marque.ts";
 
 const storage = (c: Context) => c.env.STORAGE as StorageBinding;
@@ -39,7 +40,7 @@ function failure(c: Context, reason: PrintFailure | "non_reglee") {
  * true`) : `{ printed: true }`, ou `{ print_error }` avec la raison traduite.
  * Jamais d'exception : le document est déjà enregistré.
  */
-export async function printAfterIssue(c: Context, doc: { kind: PrintKind; id: number }): Promise<{ printed: true } | { print_error: string }> {
+export async function printAfterIssue(c: Context, doc: { kind: Exclude<PrintKind, "closing">; id: number }): Promise<{ printed: true } | { print_error: string }> {
   const address = await printerAddress();
   if (!address) return { print_error: msg(c, "impression.non_reglee") };
   try {
@@ -72,13 +73,16 @@ export function mountPrintRoutes(app: OpenAPIHono<any>): void {
     const { kind, id } = (await c.req.json().catch(() => ({}))) as { kind?: unknown; id?: unknown };
     if (!PRINT_KINDS.includes(kind as PrintKind) || !Number.isInteger(id)) return c.json({ error: msg(c, "impression.document_type") }, 400);
     const account = currentAccount(c);
-    const notFound = kind === "deposit" ? "acompte.introuvable" : "facture.introuvable";
-    // La praticienne (encaissement par la praticienne activé) : les factures de ses propres rendez-vous seulement.
+    const notFound = kind === "deposit" ? "acompte.introuvable" : kind === "closing" ? "cloture.introuvable" : "facture.introuvable";
+    // La praticienne (encaissement par la praticienne activé) : les factures de ses propres rendez-vous seulement,
+    // jamais une clôture (gérante et réception, comme son PDF).
     if (account.role === "practitioner" && (kind !== "invoice" || !(await mayReadInvoice(c, id as number)))) return c.json({ error: msg(c, notFound) }, 404);
     const address = await printerAddress();
     if (!address) return failure(c, "non_reglee");
     const now = nowOf(c);
-    const result = await printDocument(storage(c), { kind: kind as PrintKind, id: id as number }, address);
+    const result = kind === "closing"
+      ? await printClosing(storage(c), id as number, address, requestLang(c))
+      : await printDocument(storage(c), { kind: kind as Exclude<PrintKind, "closing">, id: id as number }, address);
     if (!result.ok) return result.reason === "introuvable" ? c.json({ error: msg(c, notFound) }, 404) : failure(c, result.reason);
     if (result.duplicate) await logAudit({ accountId: account.id, action: "impression.duplicata", target: result.number, ip: clientIp(c), now });
     return c.json({ ok: true, duplicate: result.duplicate });

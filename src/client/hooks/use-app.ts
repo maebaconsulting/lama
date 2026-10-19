@@ -14,7 +14,7 @@ import { emitRefresh } from "../lib/refresh-bus";
 import { useCrm } from "../auth-context";
 import type {
   Appointment, Client, ClientSummary, Staff, Service, Product, BlockedSlot, Stats, PaginatedState,
-  ClientLookup, StaffLookup, TagCount,
+  ClientLookup, StaffLookup, TagCount, SupplementRef,
 } from "../types";
 import type { AppContextValue } from "../context";
 
@@ -277,6 +277,7 @@ export function useAppState(
   const addAppointment = useCallback(async (data: {
     client_id: number; staff_id?: number | null; scheduled_date: string;
     start_time?: string; notes?: string; is_recurring?: number; recurrence_interval?: string; service_ids?: number[];
+    supplements?: Record<string, unknown>[];
     allow_conflict?: boolean;
   }) => {
     await api("POST", "/api/appointments", data);
@@ -292,6 +293,17 @@ export function useAppState(
 
   const updateAppointment = useCallback(async (id: number, data: Partial<Appointment> & { allow_conflict?: boolean; notify_transfer?: boolean }) => {
     await api("PUT", `/api/appointments/${id}`, data);
+    await fetchAppointments(appointmentsPag, appointmentsSearch, appointmentsStatusFilter);
+    if (selectedAppointment && selectedAppointment.id === id) {
+      const res = await api<{ appointment: Appointment }>("GET", `/api/appointments/${id}`);
+      setSelectedAppointment(res.appointment);
+    }
+    await Promise.all([fetchStats(), fetchCalendar(calendarDate)]);
+  }, [appointmentsPag, appointmentsSearch, appointmentsStatusFilter, selectedAppointment, calendarDate, fetchAppointments, fetchStats, fetchCalendar]);
+
+  // Suppléments d'un rendez-vous (spec du 18/10/2026 § 3.3) : liste complète, puis mêmes relectures qu'une modification.
+  const saveAppointmentSupplements = useCallback(async (id: number, supplements: Record<string, unknown>[], allowConflict = false) => {
+    await api("PUT", `/api/appointments/${id}/supplements`, { supplements, ...(allowConflict ? { allow_conflict: true } : {}) });
     await fetchAppointments(appointmentsPag, appointmentsSearch, appointmentsStatusFilter);
     if (selectedAppointment && selectedAppointment.id === id) {
       const res = await api<{ appointment: Appointment }>("GET", `/api/appointments/${id}`);
@@ -455,6 +467,17 @@ export function useAppState(
     await fetchStats();
   }, [closePanel, fetchServices, fetchStats]);
 
+  // Suppléments possibles d'une prestation et « Recopier vers… » (spec du 18/10/2026 § 3.1) : le catalogue relu ensuite.
+  const saveServiceSupplements = useCallback(async (id: number, items: SupplementRef[]) => {
+    await api("PUT", `/api/services/${id}/supplements`, { items });
+    await fetchServices();
+  }, [fetchServices]);
+
+  const copyServiceSupplements = useCallback(async (id: number, targets: number[]) => {
+    await api("POST", `/api/services/${id}/supplements/copie`, { targets });
+    await fetchServices();
+  }, [fetchServices]);
+
   // ── Products CRUD ──
 
   const setProductsPage = useCallback((page: number) => setProductsPag((p) => ({ ...p, page })), []);
@@ -505,7 +528,7 @@ export function useAppState(
     navigate, openPanel, closePanel, panel, isAgent, stats, agendaStaffId, setAgendaStaffId,
     appointments, appointmentsPag, setAppointmentsPage, appointmentsSearch, setAppointmentsSearch,
     appointmentsStatusFilter, setAppointmentsStatusFilter,
-    addAppointment, updateAppointment, deleteAppointment,
+    addAppointment, updateAppointment, saveAppointmentSupplements, deleteAppointment,
     selectedAppointment, selectAppointment, addAppointmentNote, deleteAppointmentNote,
     calendarAppointments, calendarBlocked, calendarDate, setCalendarDate,
     addBlockedSlot, deleteBlockedSlot,
@@ -514,7 +537,7 @@ export function useAppState(
     selectedClient, selectedClientAppointments, selectClient, selectedClientSummary,
     clientsTag, setClientsTag, clientTags,
     staffMembers, addStaff, updateStaff, deleteStaff,
-    services, reloadServices: fetchServices, addService, updateService, deleteService,
+    services, reloadServices: fetchServices, addService, updateService, deleteService, saveServiceSupplements, copyServiceSupplements,
     products, productsPag, setProductsPage, productsSearch, setProductsSearch,
     addProduct, updateProduct, deleteProduct, refreshProduct, selectedProduct, selectProduct,
     clientLookup, staffLookup,

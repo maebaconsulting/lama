@@ -20,7 +20,7 @@ test("fiche : fonction dans les deux langues, couleur, appel ; gestion pour la g
   assert.match(fiche, /t\("equipe\.fonction"\)\}>\{staff\.title \|\| EMPTY\}/);
   assert.match(fiche, /t\("equipe\.fonction_anglais"\)\}>\{staff\.title_en \|\| EMPTY\}/);
   assert.match(fiche, /const call = telHref\(staff\.phone\);/);
-  assert.equal(fiche.match(/\{commands\.manage && /g)?.length, 3, "Modifier, Désactiver ou Réactiver, Supprimer");
+  assert.equal(fiche.match(/\{commands\.manage && /g)?.length, 5, "Modifier, Désactiver ou Réactiver, Supprimer, horaires, prestations");
   assert.match(fiche, /updateStaff\(staff\.id, \{ active: staff\.active \? 0 : 1 \}\)/);
   assert.match(fiche, /onDelete=\{\(\) => deleteStaff\(staff\.id\)\}/);
 });

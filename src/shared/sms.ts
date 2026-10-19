@@ -23,7 +23,7 @@ export function smsCount(text: string): { encoding: "gsm" | "unicode"; units: nu
 }
 
 /** Longueurs types des variables des textes (`whatsapp/textes.ts`), d'où « environ » à l'écran. */
-export const SAMPLE_LENGTHS: Record<string, number> = { prenom: 10, nom: 20, date: 18, heure: 5, prestation: 25, institut: 20, telephone: 13, document: 20, produit: 30, prix: 12, praticienne: 12 };
+export const SAMPLE_LENGTHS: Record<string, number> = { prenom: 10, nom: 20, date: 18, heure: 5, prestation: 25, institut: 20, telephone: 13, document: 20, produit: 30, prix: 16, praticienne: 12 };
 
 /** Nombre de SMS d'un texte à variables, chaque variable remplacée par un texte GSM de longueur type. */
 export function estimateTemplate(template: string): number {

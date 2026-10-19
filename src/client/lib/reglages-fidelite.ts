@@ -4,9 +4,10 @@
  * le serveur), changements réels à enregistrer et exemple calculé.
  */
 import type { Setting } from "./api-types.ts";
-import type { Key } from "../i18n/translate.ts";
+import type { Key, Lang } from "../i18n/translate.ts";
+import { texteSaisie } from "./format.ts";
 import { parseWhole, parseWholeAmount } from "./fidelite.ts";
-import { DEFAULT_TIERS, LOYALTY_LIMITS, pointsFor, tiersProblem, type LoyaltyRule, type Tier, type TierProblem } from "../../shared/fidelite.ts";
+import { DEFAULT_TIERS, loyaltyLimits, pointsFor, tiersProblem, type LoyaltyRule, type Tier, type TierProblem } from "../../shared/fidelite.ts";
 
 /** Réglages de la rubrique, dans l'ordre de l'écran. */
 export const FIDELITE_KEYS = ["crm.active", "fidelite.active", "fidelite.tranche", "fidelite.points", "fidelite.paliers"] as const;
@@ -40,7 +41,7 @@ export type FideliteField = "tranche" | "points" | "paliers";
 
 /** Facture de l'exemple de la rubrique (spec § 2 : « Une facture de 23 500 F rapporte 23 points »). */
 export const EXAMPLE_AMOUNT = 23500;
-export const MAX_TIERS: number = LOYALTY_LIMITS.tiers.max;
+export const MAX_TIERS: number = loyaltyLimits().tiers.max;
 
 const TIER_KEYS: Record<TierProblem, Key> = {
   "reglage.paliers_nombre": "reglages_fidelite.erreur_paliers_nombre",
@@ -49,8 +50,8 @@ const TIER_KEYS: Record<TierProblem, Key> = {
   "reglage.paliers_ordre": "reglages_fidelite.erreur_paliers_ordre",
 };
 
-/** Valeurs du serveur en formulaire ; défauts de la spec pour un réglage absent. */
-export function fideliteForm(settings: Setting[]): FideliteForm {
+/** Valeurs du serveur en formulaire ; défauts de la spec pour un réglage absent. Montants écrits par `texteSaisie`, relus par `parseWholeAmount`. */
+export function fideliteForm(settings: Setting[], lang: Lang = "fr"): FideliteForm {
   const value = (key: FideliteKey) => settings.find((s) => s.key === key)?.value;
   const stored = value("fidelite.paliers");
   const tiers = Array.isArray(stored) ? (stored as Tier[]) : [...DEFAULT_TIERS];
@@ -59,9 +60,9 @@ export function fideliteForm(settings: Setting[]): FideliteForm {
   return {
     crm: value("crm.active") !== false,
     active: value("fidelite.active") === true,
-    tranche: String(typeof tranche === "number" ? tranche : 1000),
+    tranche: texteSaisie(typeof tranche === "number" ? tranche : 1000, lang),
     points: String(typeof points === "number" ? points : 1),
-    tiers: tiers.map((t) => ({ points: String(t.points), montant: String(t.montant) })),
+    tiers: tiers.map((t) => ({ points: String(t.points), montant: texteSaisie(t.montant, lang) })),
   };
 }
 
@@ -71,7 +72,8 @@ const inRange = (n: number | null, limits: { min: number; max: number }): n is n
 export function ruleOf(form: FideliteForm): LoyaltyRule | null {
   const tranche = parseWholeAmount(form.tranche);
   const points = parseWhole(form.points);
-  return inRange(tranche, LOYALTY_LIMITS.tranche) && inRange(points, LOYALTY_LIMITS.points) ? { tranche, points } : null;
+  const L = loyaltyLimits();
+  return inRange(tranche, L.tranche) && inRange(points, L.points) ? { tranche, points } : null;
 }
 
 /** Paliers saisis, en nombres (texte illisible : `NaN`, refusé par `tiersProblem`). */
@@ -105,19 +107,20 @@ export function setTier(form: FideliteForm, index: number, patch: Partial<TierIn
  * change vraiment (« 1 000 » retapé « 1000 » n'est pas un changement, rien
  * au journal) ; sinon la première erreur et son champ (rien n'est enregistré).
  */
-export function fideliteChanges(baseline: FideliteForm, form: FideliteForm): { changes: { key: FideliteKey; value: unknown }[] } | { error: Key; field: FideliteField } {
+export function fideliteChanges(baseline: FideliteForm, form: FideliteForm): { changes: { key: FideliteKey; value: unknown }[] } | { error: Key; field: FideliteField; values?: { min: number; max: number } } {
+  const L = loyaltyLimits();
   const changes: { key: FideliteKey; value: unknown }[] = [];
   if (form.crm !== baseline.crm) changes.push({ key: "crm.active", value: form.crm });
   if (form.active !== baseline.active) changes.push({ key: "fidelite.active", value: form.active });
   const tranche = parseWholeAmount(form.tranche);
-  if (!inRange(tranche, LOYALTY_LIMITS.tranche)) return { error: "reglages_fidelite.erreur_tranche", field: "tranche" };
+  if (!inRange(tranche, L.tranche)) return { error: "reglages_fidelite.erreur_tranche", field: "tranche", values: { min: L.tranche.min, max: L.tranche.max } };
   if (tranche !== parseWholeAmount(baseline.tranche)) changes.push({ key: "fidelite.tranche", value: tranche });
   const points = parseWhole(form.points);
-  if (!inRange(points, LOYALTY_LIMITS.points)) return { error: "reglages_fidelite.erreur_points", field: "points" };
+  if (!inRange(points, L.points)) return { error: "reglages_fidelite.erreur_points", field: "points" };
   if (points !== parseWhole(baseline.points)) changes.push({ key: "fidelite.points", value: points });
   const tiers = tiersOf(form);
   const problem = tiersProblem(tiers);
-  if (problem) return { error: TIER_KEYS[problem], field: "paliers" };
+  if (problem) return { error: TIER_KEYS[problem], field: "paliers", ...(problem === "reglage.paliers_montant" && { values: { min: L.tierMontant.min, max: L.tierMontant.max } }) };
   if (JSON.stringify(tiers) !== JSON.stringify(tiersOf(baseline))) changes.push({ key: "fidelite.paliers", value: tiers });
   return { changes };
 }

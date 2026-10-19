@@ -36,8 +36,8 @@ test("l'équipe garde l'activité et les Réglages", () => {
 
 test("rubriques des Réglages par rôle (spec § 4), « Mon compte » pour tous", () => {
   const ids = (role: Parameters<typeof sectionsFor>[0]) => sectionsFor(role).map((s) => s.id);
-  assert.deepEqual(ids("admin"), ["caisse", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "connexions", "journal", "mon-compte"]);
-  assert.deepEqual(ids("manager"), ["institut", "caisse", "fidelite", "whatsapp", "comptes", "postes", "a-envoyer", "file-envoi", "journal", "mon-compte"]);
+  assert.deepEqual(ids("admin"), ["caisse", "en-ligne", "import", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "connexions", "journal", "mon-compte"]);
+  assert.deepEqual(ids("manager"), ["institut", "caisse", "fidelite", "whatsapp", "en-ligne", "import", "comptes", "postes", "a-envoyer", "file-envoi", "journal", "mon-compte"]);
   assert.deepEqual(ids("reception"), ["a-envoyer", "file-envoi", "mon-compte"]);
   assert.deepEqual(ids("practitioner"), ["mon-compte"]);
 });
@@ -79,4 +79,11 @@ test("écran « Vente », hors menu : gérante et réception seulement, comme le
     [false, false], [true, true], [true, true], [false, false],
   ]);
   assert.equal((menuFor("manager") as string[]).includes("vente"), false, "pas de rubrique « Vente » au menu");
+});
+
+test("« Demandes en ligne » : réception et gérante seulement", () => {
+  assert.equal(mayOpen("reception", "demandes"), true);
+  assert.equal(mayOpen("manager", "demandes"), true);
+  assert.equal(mayOpen("practitioner", "demandes"), false);
+  assert.equal(mayOpen("admin", "demandes"), false);
 });

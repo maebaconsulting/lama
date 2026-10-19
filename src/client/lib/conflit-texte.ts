@@ -4,7 +4,7 @@ import { formatRange } from "./format.ts";
 
 /** One thing already in the way of a booking, as the API reports it. */
 export type Conflict = {
-  kind: "appointment" | "blocked";
+  kind: "appointment" | "blocked" | "demande";
   start_time: string;
   end_time: string;
   /** The client holding the slot, or the reason the time is blocked; empty when there is neither. */
@@ -18,6 +18,7 @@ export type Conflict = {
  */
 export function describeConflict(c: Conflict, lang: Lang): string {
   const plage = formatRange(c.start_time, c.end_time);
+  if (c.kind === "demande") return translate(lang, "conflit.demande_en_ligne", { plage, nom: c.label });
   if (c.kind === "blocked") return c.label ? `${plage} ${c.label}` : translate(lang, "conflit.creneau_bloque", { plage });
   return c.label ? translate(lang, "conflit.reserve_pour", { plage, nom: c.label }) : translate(lang, "conflit.deja_reserve", { plage });
 }

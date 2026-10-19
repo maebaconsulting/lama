@@ -9,7 +9,10 @@
     "build": "vite build && pnpm run build:server",
     "build:server": "esbuild src/server/main.ts src/server/cli.ts --bundle --platform=node --format=esm --target=node24 --outdir=dist-server --out-extension:.js=.mjs --banner:js=\"import { createRequire as lamaCreateRequire } from 'node:module'; const require = lamaCreateRequire(import.meta.url);\" && node --experimental-strip-types src/server/caisse/copier-ressources.ts dist-server/ticket",
     "start": "node dist-server/main.mjs",
-    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+    "build:relais": "vite build --config relais/vite.config.ts",
+    "relais": "node --experimental-strip-types relais/node.ts",
+    "relais:openapi": "node --experimental-strip-types relais/outils/exporter-openapi.ts",
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts' 'relais/**/*.test.ts'",
     "paquet": "bash deploy/fabriquer-paquet.sh"
   },
   "dependencies": {

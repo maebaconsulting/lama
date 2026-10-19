@@ -1,0 +1,40 @@
+# Relais de réservation en ligne de lama : modèle de configuration wrangler (Workers, D1, Static Assets, Cron Triggers).
+# Ce modèle versionné ne porte aucun identifiant de compte ni de base : deploy/cloudflare.sh remplit les repères
+# entre arobases et écrit relais/wrangler.deploiement.toml, jamais versionné (relais/LISEZMOI.md, « Mise en service sur Cloudflare »).
+account_id = "@COMPTE@"
+name = "@WORKER@"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+workers_dev = @WORKERS_DEV@
+preview_urls = false
+@ROUTES@
+
+# Fichiers de la page (relais/dist, construits par pnpm build:relais), lus par le Worker (relais/worker.ts).
+# Sans html_handling = "none", ASSETS.fetch("/index.html") répond une redirection et aucune page n'est servie.
+# Sans run_worker_first = true, / et /gestion seraient servis sans passer par le Worker (salon non vérifié, page en cache).
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+html_handling = "none"
+run_worker_first = true
+
+# Base du relais. Le Worker ne la migre pas : deploy/cloudflare.sh lance wrangler d1 migrations apply --remote.
+[[d1_databases]]
+binding = "BASE"
+database_name = "@BASE@"
+database_id = "@ID_BASE@"
+migrations_dir = "stockage/migrations"
+
+# Purge quotidienne des données périmées de tous les salons (gestionnaire scheduled), à 03:17 UTC.
+[triggers]
+crons = ["17 3 * * *"]
+
+# Variables du Worker. Les secrets (RELAIS_CLE_MAITRE, RELAIS_ADMIN_MOT_DE_PASSE, TURNSTILE_SECRET) se posent
+# avec wrangler secret put, jamais ici.
+[vars]
+RELAIS_DEMANDES_PAR_HEURE = "@DEMANDES_PAR_HEURE@"
+TURNSTILE_CLE_SITE = "@CLE_SITE_TURNSTILE@"
+
+# Journaux du Worker dans le tableau de bord de Cloudflare.
+[observability]
+enabled = true

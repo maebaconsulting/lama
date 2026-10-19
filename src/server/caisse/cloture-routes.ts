@@ -10,10 +10,16 @@ import { nowOf } from "../clock.ts";
 import { localize, msg, requestLang } from "../messages.ts";
 import { getSetting } from "../settings.ts";
 import type { StorageBinding } from "../storage.ts";
-import { doualaDay, formatFrancs } from "../../shared/caisse.ts";
+import { doualaDay } from "../../shared/caisse.ts";
+import { formatMontantDocument } from "../../shared/montants.ts";
 import { closeTill, closingRows, dayReport, parseClosingRequest, readClosing, validDay } from "./cloture.ts";
 import { documentLogo, renderRows } from "./ticket-pdf.ts";
 import { SaleError } from "./vente.ts";
+
+/** En-tête du ticket de clôture, lu au moment de l'imprimer (PDF ou imprimante réseau). */
+export async function closingIdentity(): Promise<{ nom: string; adresse: string; marque_documents: string }> {
+  return { nom: await getSetting<string>("institut.nom"), adresse: await getSetting<string>("institut.adresse"), marque_documents: await getSetting<string>("marque.documents") };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mountClotureRoutes(app: OpenAPIHono<any>): void {
@@ -38,7 +44,7 @@ export function mountClotureRoutes(app: OpenAPIHono<any>): void {
       const closing = storage(c).transaction!((db) => readClosing(db, result.id))!;
       if (result.replay) return c.json({ closing }, 200);
       const sign = closing.difference < 0 ? "\u2212" : closing.difference > 0 ? "+" : "";
-      const target = `${closing.day} n°\u00a0${closing.seq} (${sign}${formatFrancs(Math.abs(closing.difference))}\u00a0F)`;
+      const target = `${closing.day} n°\u00a0${closing.seq} (${sign}${formatMontantDocument(Math.abs(closing.difference), "fr")})`;
       await logAudit({ accountId: account.id, action: "caisse.cloture", target, ip: clientIp(c), now });
       return c.json({ closing }, 201);
     } catch (error) {
@@ -53,7 +59,7 @@ export function mountClotureRoutes(app: OpenAPIHono<any>): void {
     const closing = storage(c).transaction!((db) => readClosing(db, id));
     if (!closing) return c.json({ error: msg(c, "cloture.introuvable") }, 404);
     try {
-      const identity = { nom: await getSetting<string>("institut.nom"), adresse: await getSetting<string>("institut.adresse"), marque_documents: await getSetting<string>("marque.documents") };
+      const identity = await closingIdentity();
       const logo = await documentLogo();
       const name = `cloture-${closing.day}-${closing.seq}`;
       const pdf = await renderRows(closingRows(closing, identity, requestLang(c), { logo: logo !== null }), { title: name, author: identity.nom, date: closing.closed_at }, { logo });

@@ -19,10 +19,12 @@ test("moyens activés par la gérante en boutons de 64 px, pavé de 64 px à tro
   assert.match(paiement, /const methods = PAYMENT_METHODS\.filter\(\(m\) => \(settings\.methods \?\? \[\]\)\.includes\(m\)\);/);
   assert.match(paiement, /"min-h-16 rounded-sm border px-2 text-sm leading-tight/);
   assert.match(paiement, /onClick=\{\(\) => setDraft\(chooseMethod\(draft, m, due\)\)\}/);
-  assert.match(paiement, /\{PAD_KEYS\.map\(\(k\) => \(/);
+  assert.match(paiement, /\{padKeys\(\)\.map\(\(k\) => \(/);
   assert.match(paiement, /className=\{cn\("h-16 border-filet px-1", k === "effacer" \? "text-sm" : "font-serif text-3xl"\)\}/);
   assert.match(paiement, /onClick=\{\(\) => setDraft\(pressKey\(draft, k, due\)\)\}/);
-  assert.match(paiement, /\{k === "effacer" \? t\("caisse\.effacer"\) : k\}/);
+  assert.match(paiement, /\{k === "effacer" \? t\("caisse\.effacer"\) : k === "virgule" \? separateurDecimal\(lang\) : k\}/);
+  assert.match(paiement, /aria-label=\{k === "virgule" \? t\("caisse\.touche_virgule"\) : undefined\}/);
+  assert.match(paiement, /<span className="chiffres">\{saisiePave\(current, lang\)\}<\/span>/);
 });
 
 test("espèces : montant exact puis montants ronds ; « À rendre » en très grand avec les coupures (courtes au téléphone)", () => {

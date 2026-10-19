@@ -1,35 +1,41 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { X } from "lucide-preact";
 import { useApp } from "../../context";
-import type { Appointment, BlockedSlot } from "../../types";
+import type { Appointment, BlockedSlot, DemandeAgenda } from "../../types";
 import { useI18n } from "@/i18n/provider";
 import { blockLabelKey, blockLines, blockTone, gridHeight, HOUR_HEIGHT_PX, inColumn, initialScrollTop, minutesOf, nowLineTop, slotAt, type AgendaColumn } from "@/lib/agenda";
-import { pickText } from "@/lib/bilingual";
 import { DAY_END_HOUR, DAY_START_HOUR } from "@/lib/creneaux";
 import { formatRange, hourLabel } from "@/lib/format";
 import { encreVars, statusInk, toInk } from "@/lib/inks";
 import { packLanes } from "@/lib/overlap";
+import { cardText } from "@/lib/supplements";
 import { statusLabel } from "@/lib/statuses";
 import { cn } from "@/lib/utils";
+import type { Intervalle } from "../../../shared/horaires";
 import { ConfirmerSuppression } from "../confirmer-suppression";
 
-// Graduation de 07:00 à 20:00, journée de 07:00 à 21:00 (bornes partagées avec les créneaux de ChampHeure).
+// Graduation de 07:00 à 22:00, journée de 07:00 à 23:00 (bornes partagées avec les créneaux de ChampHeure).
 const HOURS = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, i) => i + DAY_START_HOUR);
 const DAY_START = DAY_START_HOUR * 60;
 
 /**
- * Rendez-vous et créneaux bloqués d'une colonne, côte à côte quand ils se
- * chevauchent : un blocage (pause déjeuner) n'est jamais caché sous un rendez-vous.
+ * Rendez-vous, créneaux bloqués et demandes en ligne à confirmer d'une colonne,
+ * côte à côte quand ils se chevauchent : rien n'est jamais caché sous un rendez-vous.
  */
-function layOutColumn(appointments: Appointment[], blocked: BlockedSlot[]) {
+function layOutColumn(appointments: Appointment[], blocked: BlockedSlot[], demandes: DemandeAgenda[]) {
   return packLanes([
     ...blocked.map((b) => ({
-      key: `b-${b.id}`, block: b, appointment: null as Appointment | null,
+      key: `b-${b.id}`, block: b, appointment: null as Appointment | null, demande: null as DemandeAgenda | null,
       start: minutesOf(b.start_time) - DAY_START,
       end: minutesOf(b.end_time) - DAY_START,
     })),
+    ...demandes.map((d, i) => ({
+      key: `d-${d.id ?? i}-${d.start_time}`, block: null as BlockedSlot | null, appointment: null as Appointment | null, demande: d,
+      start: minutesOf(d.start_time) - DAY_START,
+      end: minutesOf(d.end_time) - DAY_START,
+    })),
     ...appointments.map((a) => ({
-      key: `a-${a.id}`, block: null as BlockedSlot | null, appointment: a,
+      key: `a-${a.id}`, block: null as BlockedSlot | null, appointment: a, demande: null as DemandeAgenda | null,
       start: minutesOf(a.start_time) - DAY_START,
       end: minutesOf(a.end_time) - DAY_START,
     })),
@@ -50,9 +56,10 @@ const px = (minutes: number) => (minutes / 60) * HOUR_HEIGHT_PX;
  * défilement, ligne « maintenant » à l'heure de Douala le jour même,
  * défilement jusqu'à l'heure courante à l'ouverture du jour. Toucher un
  * créneau vide propose un nouveau rendez-vous (`onSlot`, rôles qui peuvent
- * en créer) ; toucher un rendez-vous ouvre sa fiche dans le panneau.
+ * en créer) ; toucher un rendez-vous ouvre sa fiche dans le panneau. Les heures
+ * hors horaires (`fermees`) sont grisées, rien n'est bloqué.
  */
-export function GrilleAgenda({ columns, appointments, blocked, day, today, now, showHeaders, onSlot, canUnblock }: {
+export function GrilleAgenda({ columns, appointments, blocked, day, today, now, showHeaders, onSlot, canUnblock, fermees, demandes, onDemande }: {
   columns: AgendaColumn[];
   appointments: Appointment[];
   blocked: BlockedSlot[];
@@ -62,6 +69,9 @@ export function GrilleAgenda({ columns, appointments, blocked, day, today, now, 
   showHeaders: boolean;
   onSlot: ((column: AgendaColumn, time: string) => void) | null;
   canUnblock: boolean;
+  fermees: (column: AgendaColumn) => Intervalle[];
+  demandes: DemandeAgenda[];
+  onDemande: (() => void) | null;
 }) {
   const { openPanel, deleteBlockedSlot, setError, selectedAppointment } = useApp();
   const { t, lang } = useI18n();
@@ -82,8 +92,8 @@ export function GrilleAgenda({ columns, appointments, blocked, day, today, now, 
     if (scroller.current) scroller.current.scrollTop = initialScrollTop(day, today, now, HOUR_HEIGHT_PX, ongoing);
   }, [day]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const serviceNames = (apt: Appointment) =>
-    apt.appointment_services?.map((s) => pickText(lang, s.service_name, s.service_name_en)).filter(Boolean).join(", ") ?? "";
+  // Prestations suivies de leurs suppléments (spec du 18/10/2026 § 3.3) ; la carte tronque le texte si la place manque.
+  const serviceNames = (apt: Appointment) => cardText(apt, lang);
 
   const pickSlot = (column: AgendaColumn) => onSlot && ((e: MouseEvent) => {
     // Seul le fond de la colonne est un créneau vide (pas un rendez-vous, pas un blocage).
@@ -118,6 +128,7 @@ export function GrilleAgenda({ columns, appointments, blocked, day, today, now, 
           const items = layOutColumn(
             appointments.filter((a) => inColumn(column, a.staff_id)),
             blocked.filter((b) => inColumn(column, b.staff_id)),
+            demandes.filter((d) => inColumn(column, d.staff_id)),
           );
           const ink = column.color ? encreVars(toInk(column.color)) : {};
           const onClick = pickSlot(column);
@@ -138,6 +149,15 @@ export function GrilleAgenda({ columns, appointments, blocked, day, today, now, 
               >
                 {HOURS.map((h) => (
                   <div key={h} className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-border" style={{ top: px(h * 60 - DAY_START) }} />
+                ))}
+
+                {fermees(column).map((f) => (
+                  <div
+                    key={`f-${f.start}`}
+                    className="pointer-events-none absolute left-0 right-0 bg-muted/60"
+                    style={{ top: px(f.start - DAY_START), height: px(f.end - f.start) }}
+                    aria-hidden="true"
+                  />
                 ))}
 
                 {items.map((item) => {
@@ -167,6 +187,44 @@ export function GrilleAgenda({ columns, appointments, blocked, day, today, now, 
                           </button>
                         )}
                       </div>
+                    );
+                  }
+
+                  if (item.demande) {
+                    const d = item.demande;
+                    if (!d.cliente_nom || !onDemande) {
+                      // Praticienne : le créneau est seulement « réservé » (spec § 4.4), sans nom ni prestation.
+                      return (
+                        <div key={item.key} className="absolute z-10 flex items-center rounded-sm bg-muted px-2 text-xs text-muted-foreground" style={{ ...lane, top, height: Math.max(size, 20) }}>
+                          <span className="truncate">{t("agenda.reserve")}</span>
+                        </div>
+                      );
+                    }
+                    // Même règle que les rendez-vous (`blockLines`) : une carte courte n'écrit qu'une ligne, la cliente d'abord, l'état jamais coupé.
+                    const hauteur = Math.max(size, 28);
+                    const lignes = blockLines(hauteur);
+                    const qui = `${d.cliente_nom}${d.sans_preference ? ` · ${t("agenda.a_attribuer")}` : ""}`;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className="hachure absolute z-20 overflow-hidden rounded-sm border border-dashed border-foreground px-2 py-1 text-left text-xs focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                        style={{ ...lane, top, height: hauteur }}
+                        aria-label={t("agenda.demande_aria", { plage: formatRange(d.start_time, d.end_time), cliente: d.cliente_nom })}
+                        onClick={onDemande}
+                      >
+                        {lignes === 1 ? (
+                          <span className="flex min-w-0 items-baseline gap-1">
+                            <span className="min-w-0 truncate font-medium">{d.cliente_nom}</span>
+                            <span className="shrink-0 whitespace-nowrap">· {t("agenda.en_ligne_a_confirmer")}</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span className="block truncate font-medium">{t("agenda.en_ligne_a_confirmer")}</span>
+                            <span className="block truncate">{qui}</span>
+                          </>
+                        )}
+                      </button>
                     );
                   }
 

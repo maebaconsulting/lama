@@ -13,3 +13,6 @@ data.db
 data
 dist-server
 paquets
+relais-donnees.db*
+relais/wrangler.deploiement.toml
+relais/wrangler.essai-local.toml

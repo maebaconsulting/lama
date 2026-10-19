@@ -58,6 +58,7 @@ test("préfixe des factures (distribution D-01) : rubrique réduite au préfixe 
   const caisse = readFileSync("src/client/components/reglages/caisse.tsx", "utf8");
   assert.match(caisse, /return account\.role === "admin" \? <CaisseAdministrateur \/> : <CaisseGerante \/>;/);
   assert.equal(caisse.match(/<PrefixeFactures setting=\{data\??\.settings\.find\(\(s\) => s\.key === "caisse\.prefixe"\)\} onSaved=\{reload\} \/>/g)?.length, 2, "dans les deux rubriques");
+  assert.equal(caisse.match(/<DeviseInstitut settings=\{data(\?\.settings \?\? \[\]|\.settings)\} onSaved=\{reload\} \/>/g)?.length, 2, "rubrique Devise dans les deux rubriques Caisse");
   const bloc = readFileSync("src/client/components/reglages/prefixe-factures.tsx", "utf8");
   assert.match(bloc, /confirm\(\(\) => api\("PUT", "\/api\/settings\/caisse\.prefixe", \{ value: result\.value \}\)\)/);
   assert.match(bloc, /if \(!etat\.modifiable\) \{/, "figé ou gérante : texte seul, aucun formulaire imbriqué");
@@ -69,4 +70,12 @@ test("préfixe des factures (distribution D-01) : rubrique réduite au préfixe 
 test("préfixe des factures (rulings T2-1) : la première vente le fige sans signal « settings », l'écran se recharge aussi sur « invoices » (deux rubriques)", () => {
   const caisse = readFileSync("src/client/components/reglages/caisse.tsx", "utf8");
   assert.equal(caisse.match(/useLoad\(\(\) => api<\{ settings: Setting\[\] \}>\("GET", "\/api\/settings"\), \["settings", "invoices"\]\)/g)?.length, 2);
+});
+
+test("rubrique Devise : pas de formulaire imbriqué, boutons sans submit, réglages d'affichage confirmés", () => {
+  const bloc = readFileSync("src/client/components/reglages/devise-institut.tsx", "utf8");
+  assert.doesNotMatch(bloc, /<form/, "le formulaire de la gérante enveloppe déjà la rubrique");
+  assert.match(bloc, /<Button type="button" onClick=\{changer\}/, "le bouton de changement ne soumet pas le parent");
+  assert.doesNotMatch(bloc, /<Button(?![^>]*type="button")/, "aucun bouton sans type=\"button\"");
+  assert.match(bloc, /confirm\(\(\) => api\("PUT", `\/api\/settings\/\$\{key\}`, \{ value \}\)\)/, "PUT des réglages d'affichage confirmé");
 });

@@ -14,7 +14,7 @@ import { localize, msg } from "../messages.ts";
 import { publish } from "../realtime.ts";
 import { getSetting } from "../settings.ts";
 import type { StorageBinding } from "../storage.ts";
-import { formatFrancs } from "../../shared/caisse.ts";
+import { formatMontantDocument } from "../../shared/montants.ts";
 import { counterDeposits, depositsOf, issueDeposit, parseDepositRequest, parseSettleRequest, readDeposit, settleDeposit, type DepositRecord } from "./acompte.ts";
 import { fiscalSnapshot, readSaleSettings, ticketFiscal } from "./routes.ts";
 import { documentLogo, renderTicket } from "./ticket-pdf.ts";
@@ -86,7 +86,7 @@ export function mountAcompteRoutes(app: OpenAPIHono<any>): void {
       const result = storage(c).transaction!((db) => issueDeposit(db, req, { now, accountId: account.id, lang, fiscal, methods: settings.methods }));
       const deposit = storage(c).transaction!((db) => readDeposit(db, result.id))!;
       if (result.replay) return c.json({ deposit }, 200);
-      await logAudit({ accountId: account.id, action: "acompte.encaisse", target: `${deposit.number} (${formatFrancs(deposit.amount)}\u00a0F)`, ip: clientIp(c), now });
+      await logAudit({ accountId: account.id, action: "acompte.encaisse", target: `${deposit.number} (${formatMontantDocument(deposit.amount, "fr")})`, ip: clientIp(c), now });
       publish({ resource: "appointments" });
       const printed = (body as { print?: unknown }).print === true ? await printAfterIssue(c, { kind: "deposit", id: result.id }) : {};
       return c.json({ deposit: { ...deposit, ...printed } }, 201);
@@ -107,7 +107,7 @@ export function mountAcompteRoutes(app: OpenAPIHono<any>): void {
       const deposit = storage(c).transaction!((db) => readDeposit(db, result.id))!;
       if (result.replay) return c.json({ deposit }, 200);
       const action = req.action === "refund" ? "acompte.rembourse" : "acompte.garde";
-      await logAudit({ accountId: account.id, action, target: `${deposit.number} (${formatFrancs(deposit.amount)}\u00a0F)`, ip: clientIp(c), now });
+      await logAudit({ accountId: account.id, action, target: `${deposit.number} (${formatMontantDocument(deposit.amount, "fr")})`, ip: clientIp(c), now });
       publish({ resource: "appointments" });
       return c.json({ deposit }, 201);
     } catch (error) {

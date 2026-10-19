@@ -1,8 +1,8 @@
-import type { ComponentChildren } from "preact";
+import { Fragment, type ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp } from "../context";
 import { useAuth } from "../auth-context";
-import { MoreHorizontal, Phone, Send, Trash2 } from "lucide-preact";
+import { MoreHorizontal, Phone, Plus, Send, Trash2 } from "lucide-preact";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,6 +19,7 @@ import { api } from "../api";
 import { useLoad } from "../hooks/use-load";
 import { pathFor } from "@/lib/routes";
 import { statusLabel } from "@/lib/statuses";
+import { supplementLabel } from "@/lib/supplements";
 import { cn } from "@/lib/utils";
 import type { AppointmentStatus } from "../types";
 import { PayeBadge, StatusBadge } from "./status-badge";
@@ -26,6 +27,7 @@ import { AcompteRdv } from "./caisse/acompte-rdv";
 import { BoutonsTicket } from "./caisse/boutons-ticket";
 import { RescheduleAppointment } from "./reschedule-appointment";
 import { ConfirmerSuppression } from "./confirmer-suppression";
+import { EditeurSupplements } from "./supplements/editeur-rdv";
 
 /**
  * Brouillons de note par rendez-vous, en mémoire seulement : toucher un autre
@@ -79,6 +81,7 @@ export function AppointmentDetail() {
   // Statut qui attend sa confirmation (Annulé, Absente) et suppression demandée depuis « … ».
   const [pending, setPending] = useState<AppointmentStatus | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [supplements, setSupplements] = useState(false);
   const statusGroup = useRef<HTMLDivElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
   const lastPending = useRef<AppointmentStatus | null>(null);
@@ -157,6 +160,7 @@ export function AppointmentDetail() {
         <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
           <span className="chiffres whitespace-nowrap text-sm text-muted-foreground">{apt.identifier}</span>
           <StatusBadge status={apt.status} />
+          {Boolean(apt.en_ligne) && <span className="etiquette text-encre-grise">{t("rdv.en_ligne")}</span>}
           {Boolean(apt.paid) && <PayeBadge />}
           {/* Correctif final (point 1) : une facture émise, même entièrement reprise par un avoir, masque toujours « Supprimer ». */}
           {commands.remove && !apt.invoiced && (
@@ -272,15 +276,32 @@ export function AppointmentDetail() {
             ) : (
               <ul className="divide-y divide-border">
                 {services.map((svc) => (
-                  <li key={svc.id} className="flex items-baseline justify-between gap-3 py-1.5">
-                    <span className="min-w-0">{pickText(lang, svc.service_name, svc.service_name_en) || t("rdv.prestation_numero", { id: svc.service_id })}</span>
-                    <span className="flex shrink-0 items-baseline gap-2">
-                      <span className="text-xs text-muted-foreground">{t("commun.minutes", { min: svc.duration })}</span>
-                      {svc.price != null && <span className="chiffres whitespace-nowrap font-medium">{formatPrice(svc.price, lang)}</span>}
-                    </span>
-                  </li>
+                  <Fragment key={svc.id}>
+                    <li className="flex items-baseline justify-between gap-3 py-1.5">
+                      <span className="min-w-0">{pickText(lang, svc.service_name, svc.service_name_en) || t("rdv.prestation_numero", { id: svc.service_id })}</span>
+                      <span className="flex shrink-0 items-baseline gap-2">
+                        <span className="text-xs text-muted-foreground">{t("commun.minutes", { min: svc.duration })}</span>
+                        {svc.price != null && <span className="chiffres whitespace-nowrap font-medium">{formatPrice(svc.price, lang)}</span>}
+                      </span>
+                    </li>
+                    {(svc.supplements ?? []).map((s) => (
+                      <li key={`s${s.id}`} className="flex items-baseline justify-between gap-3 py-1 pl-4 text-sm">
+                        <span className="flex min-w-0 items-baseline gap-1.5">
+                          <Plus className="h-3 w-3 shrink-0 text-encre-grise" aria-hidden="true" />
+                          <span className="min-w-0 break-words">{supplementLabel(s, lang)}{s.quantity > 1 && ` × ${s.quantity}`}</span>
+                        </span>
+                        <span className="flex shrink-0 items-baseline gap-2">
+                          {s.minutes > 0 && <span className="text-xs text-muted-foreground">{t("commun.minutes", { min: s.minutes })}</span>}
+                          {s.price != null && <span className="chiffres whitespace-nowrap">{formatPrice(s.price * s.quantity, lang)}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </Fragment>
                 ))}
               </ul>
+            )}
+            {commands.move && !apt.paid && services.length > 0 && (
+              <Button variant="outline" className="mt-2" onClick={() => setSupplements(true)}>{t("rdv.modifier_supplements")}</Button>
             )}
           </Ligne>
         </div>
@@ -369,6 +390,7 @@ export function AppointmentDetail() {
           </Button>
         </form>
       )}
+      {supplements && <EditeurSupplements apt={apt} onClose={() => setSupplements(false)} />}
       {rescheduling && <RescheduleAppointment key={`deplacer-${apt.id}`} appointment={apt} onClose={() => setRescheduling(false)} />}
       {commands.deleteNote && noteASupprimer && (
         <ConfirmerSuppression

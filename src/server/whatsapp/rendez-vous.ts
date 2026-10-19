@@ -23,6 +23,9 @@ export interface MessageSettings {
   texts: Record<TemplateKind, Record<Lang, string>>;
 }
 
+/** Messages liés à un rendez-vous ; les textes de la réservation en ligne ont leur propre module (en-ligne/messages-en-ligne.ts). */
+export type NatureRendezVous = Extract<TemplateKind, "confirmation" | "rappel" | "transfert">;
+
 export async function readMessageSettings(): Promise<MessageSettings> {
   const texts = {} as Record<TemplateKind, Record<Lang, string>>;
   for (const kind of TEMPLATE_KINDS) {
@@ -52,7 +55,7 @@ export async function readMessageSettings(): Promise<MessageSettings> {
  * Transfert : le prénom de la praticienne du rendez-vous (`{praticienne}`), et
  * la praticienne dans l'origine, pour reconnaître un nouveau transfert avant l'envoi.
  */
-export function appointmentMessage(db: Database, s: MessageSettings, kind: TemplateKind, appointmentId: number, now: number): { message: WhatsappMessage; dedupeKey: string; at: number } | null {
+export function appointmentMessage(db: Database, s: MessageSettings, kind: NatureRendezVous, appointmentId: number, now: number): { message: WhatsappMessage; dedupeKey: string; at: number } | null {
   const row = db.prepare(
     `SELECT a.id, a.scheduled_date, a.start_time, a.staff_id, COALESCE(s.name, '') AS staff_name, c.id AS client_id, c.name, c.phone, c.channel, c.language
        FROM appointments a JOIN clients c ON c.id = a.client_id LEFT JOIN staff s ON s.id = a.staff_id WHERE a.id = ?`,
@@ -101,7 +104,7 @@ export function appointmentMessage(db: Database, s: MessageSettings, kind: Templ
  * hors de cette API) ne doit jamais empêcher l'écriture du rendez-vous dans
  * la même transaction. L'erreur est journalisée sans le texte ni le numéro.
  */
-export function queueAppointmentMessage(db: Database, s: MessageSettings, kind: TemplateKind, appointmentId: number, now: number): boolean {
+export function queueAppointmentMessage(db: Database, s: MessageSettings, kind: NatureRendezVous, appointmentId: number, now: number): boolean {
   let built: ReturnType<typeof appointmentMessage>;
   try {
     built = appointmentMessage(db, s, kind, appointmentId, now);

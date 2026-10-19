@@ -13,6 +13,8 @@ import { issueSale, priceSale, type SaleRequest, type SaleSettings } from "./cai
 import { issueCreditNote } from "./caisse/avoir.ts";
 import { writeTags } from "./crm/etiquettes.ts";
 import { dayBounds, doualaDay, REFERENCE_REQUIRED, type PaymentMethod } from "../shared/caisse.ts";
+import { DEVISE_DEFAUT, prixDemo, type CodeDevise } from "../shared/devises.ts";
+import { deviseActive } from "../shared/devise-active.ts";
 
 type StaffSeed = [id: number, name: string, email: string, title: string, title_en: string, color: string];
 type ServiceSeed = [
@@ -58,6 +60,11 @@ const SERVICES: ServiceSeed[] = [
   [13, "Brushing", "Blow-dry", "Shampoing et mise en forme", "Wash and styling", 45, 7000, "#4B4B4B", "Coiffure", "Hair"],
 ];
 
+/** Prestations de démonstration dans la devise `code` (prix écrits en XAF, convertis et arrondis). */
+export function servicesDemo(code: CodeDevise): ServiceSeed[] {
+  return SERVICES.map((s) => { const c = [...s] as ServiceSeed; c[6] = prixDemo(s[6], code); return c; });
+}
+
 const CLIENTS: ClientSeed[] = [
   [1, "Aïcha Mbarga", "aicha.mbarga@exemple.cm", "+237 677 12 34 01"],
   [2, "Brenda Nkeng", "brenda.nkeng@exemple.cm", "+237 699 45 67 02"],
@@ -75,6 +82,11 @@ const PRODUCTS: ProductSeed[] = [
   [5, "Cire tiède", "Warm wax", "Épil'Soin", "Épilation", "Waxing", 8000, 4000, 4],
   [6, "Mèches synthétiques", "Synthetic extensions", "Afro Style", "Cheveux", "Hair", 3500, 2000, 50],
 ];
+
+/** Produits de démonstration dans la devise `code` : prix et coût convertis. */
+export function produitsDemo(code: CodeDevise): ProductSeed[] {
+  return PRODUCTS.map((p) => { const c = [...p] as ProductSeed; c[6] = prixDemo(p[6], code); c[7] = prixDemo(p[7], code); return c; });
+}
 
 /**
  * Historique de démonstration (mini CRM, décision 31). Chaque visite :
@@ -250,10 +262,10 @@ function writeDemoHistory(db: Database, ctx: HistoryContext): void {
           client_id: visit.client,
           appointment_id: aptId,
           lines: [
-            ...visit.services.map((ref_id) => ({ kind: "service" as const, ref_id, quantity: 1, staff_id: visit.staff })),
-            ...(visit.products ?? []).map(([ref_id, quantity]) => ({ kind: "product" as const, ref_id, quantity, staff_id: null })),
+            ...visit.services.map((ref_id) => ({ kind: "service" as const, ref_id, quantity: 1, staff_id: visit.staff, parent: null })),
+            ...(visit.products ?? []).map(([ref_id, quantity]) => ({ kind: "product" as const, ref_id, quantity, staff_id: null, parent: null })),
           ],
-          tip: visit.tip && ctx.settings.tips ? { amount: visit.tip, staff_id: visit.staff } : null,
+          tip: visit.tip && ctx.settings.tips ? { amount: prixDemo(visit.tip, deviseActive().code), staff_id: visit.staff } : null,
         }, atDouala(day, visit.time) + 60 * 60_000);
       },
     });
@@ -265,7 +277,7 @@ function writeDemoHistory(db: Database, ctx: HistoryContext): void {
     run: () => {
       purchaseId = sell({
         client_id: PURCHASE.client, appointment_id: null, tip: null,
-        lines: PURCHASE.products.map(([ref_id, quantity]) => ({ kind: "product" as const, ref_id, quantity, staff_id: null })),
+        lines: PURCHASE.products.map(([ref_id, quantity]) => ({ kind: "product" as const, ref_id, quantity, staff_id: null, parent: null })),
       }, atDouala(purchaseDay, PURCHASE.time));
     },
   });
@@ -344,10 +356,10 @@ async function seedBase(): Promise<void> {
     await run("INSERT OR IGNORE INTO _meta (key, value) VALUES ('appointment_counter', '0')");
     await run("INSERT OR IGNORE INTO _meta (key, value) VALUES ('appointment_prefix', 'APT')");
     await seedIfEmpty("staff", ["id", "name", "email", "title", "title_en", "color"], STAFF);
-    await seedIfEmpty("services", ["id", "name", "name_en", "description", "description_en", "duration", "price", "color", "category", "category_en"], SERVICES);
+    await seedIfEmpty("services", ["id", "name", "name_en", "description", "description_en", "duration", "price", "color", "category", "category_en"], servicesDemo(deviseActive().code));
     // Démonstration publique (DP-06) : numéros visiblement fictifs (+237 600 00 00 01…), jamais un numéro qui pourrait exister.
     await seedIfEmpty("clients", ["id", "name", "email", "phone"], estDemoPublique() ? CLIENTS.map(([id, name, email]) => [id, name, email, numeroFictif(id)] as ClientSeed) : CLIENTS);
-    await seedIfEmpty("products", ["id", "name", "name_en", "brand", "category", "category_en", "price", "cost", "stock"], PRODUCTS);
+    await seedIfEmpty("products", ["id", "name", "name_en", "brand", "category", "category_en", "price", "cost", "stock"], produitsDemo(deviseActive().code));
     // Nom de l'institut de démonstration (renommage lama : vide par défaut) ; jamais par-dessus le nom saisi.
     await run("INSERT OR IGNORE INTO settings (key, value, secret, updated_at) VALUES ('institut.nom', ?, 0, ?)", [JSON.stringify(DEMO_INSTITUT), Date.now()]);
     // Série DEMO (D-02), avant toute facture de l'historique ; jamais par-dessus un préfixe écrit, jamais après une
@@ -370,6 +382,26 @@ async function seedBase(): Promise<void> {
  * puis historique de démonstration (`LAMA_DEMO=1`, sauf `LAMA_DEMO_HISTORY=0`
  * posé par les essais), retenté tant qu'aucun compte ne peut porter les factures.
  */
+/**
+ * Démonstration installée dans une autre devise que le FCFA (spec § 4) : les
+ * fiches de démonstration, semées en XAF dès la première requête, reprennent
+ * par identifiant leurs prix (et coûts) convertis, tant qu'aucune facture
+ * n'existe et seulement s'ils n'ont pas été retouchés. Hors démonstration ou
+ * en XAF, rien.
+ */
+export async function convertirFichesDemo(code: CodeDevise): Promise<void> {
+  if (!demonstration() || code === DEVISE_DEFAUT) return;
+  if (await get("SELECT 1 AS n FROM invoices LIMIT 1")) return;
+  const services = servicesDemo(code);
+  for (const [i, s] of SERVICES.entries()) {
+    await run("UPDATE services SET price = ? WHERE id = ? AND price = ?", [services[i][6], s[0], s[6]]);
+  }
+  const produits = produitsDemo(code);
+  for (const [i, p] of PRODUCTS.entries()) {
+    await run("UPDATE products SET price = ?, cost = ? WHERE id = ? AND price = ? AND cost = ?", [produits[i][6], produits[i][7], p[0], p[6], p[7]]);
+  }
+}
+
 export async function ensureSeeded(storage?: StorageBinding, now: number = Date.now()): Promise<void> {
   if (seeded && historyDone) return;
   if (!seeded) await seedBase();

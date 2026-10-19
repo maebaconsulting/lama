@@ -15,12 +15,13 @@ test("minutesOf : HH:MM et HH:MM:SS lus, heure illisible ou hors bornes en NaN",
 });
 
 test("ligne « maintenant » : 64 px par heure depuis 07:00, absente hors de la journée", () => {
-  assert.equal(gridHeight(), 14 * HOUR_HEIGHT_PX);
+  assert.equal(gridHeight(), 16 * HOUR_HEIGHT_PX);
   assert.equal(nowLineTop("07:00"), 0);
   assert.equal(nowLineTop("09:30"), 160);
   assert.equal(nowLineTop("21:00"), 896);
+  assert.equal(nowLineTop("23:00"), 1024);
   assert.equal(nowLineTop("06:59"), null);
-  assert.equal(nowLineTop("21:01"), null);
+  assert.equal(nowLineTop("23:01"), null);
   assert.equal(nowLineTop("n'importe quoi"), null);
   assert.equal(nowLineTop("08:00", 100), 100);
 });
@@ -29,19 +30,19 @@ test("défilement à l'ouverture : une heure au-dessus de l'heure courante le jo
   assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "14:00"), 7 * 64 - 64);
   assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "07:20"), 0, "jamais négatif");
   assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "06:00"), 0, "avant l'ouverture : le haut");
-  assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "22:30"), gridHeight(), "après la fermeture : tout en bas");
+  assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "23:30"), gridHeight(), "après la fermeture : tout en bas");
   assert.equal(initialScrollTop("2026-09-30", "2026-09-29", "14:00"), 0, "autre jour : le haut");
   assert.equal(initialScrollTop("2026-09-29", "2026-09-29", "??"), 0);
 });
 
-test("créneau touché : le quart d'heure qui contient le point, entre 07:00 et 20:45", () => {
+test("créneau touché : le quart d'heure qui contient le point, entre 07:00 et 22:45", () => {
   assert.equal(slotAt(0), "07:00");
   assert.equal(slotAt(15.9), "07:00");
   assert.equal(slotAt(16), "07:15");
   assert.equal(slotAt(64 * 2 + 40), "09:30");
   assert.equal(slotAt(-30), "07:00", "au-dessus de la grille");
-  assert.equal(slotAt(gridHeight()), "20:45", "bas de la grille : dernier début possible");
-  assert.equal(slotAt(99999), "20:45");
+  assert.equal(slotAt(gridHeight()), "22:45", "bas de la grille : dernier début possible");
+  assert.equal(slotAt(99999), "22:45");
   assert.equal(slotAt(Number.NaN), "07:00");
   assert.equal(slotAt(100, 0), "07:00", "hauteur nulle : pas de division par zéro");
 });

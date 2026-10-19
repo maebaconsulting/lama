@@ -237,6 +237,11 @@
 .encre-lisere {
   border-left-color: color-mix(in srgb, var(--encre) var(--encre-part-trait), #F3EEE4);
 }
+/* Demande en ligne à confirmer (réservation en ligne, spec § 4.4) : carte hachurée, ce n'est pas encore un rendez-vous. */
+.hachure {
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--muted) 6px 12px);
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

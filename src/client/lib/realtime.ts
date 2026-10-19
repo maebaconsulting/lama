@@ -7,7 +7,7 @@
 
 export type RefreshKey =
   | "stats" | "appointments" | "calendar" | "selectedAppointment" | "clients" | "selectedClient"
-  | "lookups" | "staff" | "services" | "products" | "selectedProduct" | "outbox" | "settings" | "accounts" | "invoices";
+  | "lookups" | "staff" | "services" | "products" | "selectedProduct" | "outbox" | "settings" | "accounts" | "invoices" | "demandes";
 
 const PLAN: Record<string, RefreshKey[]> = {
   appointments: ["appointments", "calendar", "stats", "selectedAppointment", "selectedClient"],
@@ -20,6 +20,7 @@ const PLAN: Record<string, RefreshKey[]> = {
   settings: ["settings"],
   accounts: ["accounts"],
   invoices: ["invoices", "selectedClient"],
+  demandes_en_ligne: ["demandes", "calendar"],
 };
 
 export const ALL_KEYS: RefreshKey[] = [...new Set(Object.values(PLAN).flat())];

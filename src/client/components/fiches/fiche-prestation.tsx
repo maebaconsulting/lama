@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import type { Service } from "../../types";
 import { Montant } from "../comptoir";
 import { CreateService } from "../create-service";
+import { Erreur } from "../champ";
+import { ListeSupplements, RecopierSupplements, useProduits } from "../supplements/liste-prestation";
 import { ACTION, EnTeteFiche, LigneDetail, PastilleEncre, SuppressionFiche } from "./corps-fiche";
 
 const FOCUS = "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -49,12 +51,23 @@ function BasculeActive({ active, disabled, onToggle }: { active: boolean; disabl
  * figure dans des rendez-vous : la désactiver plutôt).
  */
 export function FichePrestation({ service }: { service: Service }) {
-  const { updateService, deleteService, setError } = useApp();
+  const { updateService, deleteService, setError, services } = useApp();
   const { account } = useAuth();
   const { t, lang } = useI18n();
   const commands = catalogCommands(account.role);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [liste, setListe] = useState(false);
+  const [recopie, setRecopie] = useState(false);
+  const refs = service.supplements ?? [];
+  // Les produits ne sont demandés que si la liste en contient un (pour les nommer) ; le dialogue charge les siens.
+  const charge = useProduits(refs.some((r) => r.kind === "product"));
+  const nomRef = (kind: "service" | "product", id: number) => {
+    const item = kind === "service" ? services.find((s) => s.id === id) : charge.connus.get(id);
+    // Les produits sont chargés par page (ou pas encore) : un produit absent n'est pas forcément retiré.
+    if (kind === "product") return item ? pickText(lang, item.name, item.name_en) : t("prestation.produit_numero", { id });
+    return item ? pickText(lang, item.name, item.name_en) : t("caisse.article_retire");
+  };
   const name = pickText(lang, service.name, service.name_en);
   const description = pickText(lang, service.description, service.description_en);
   const category = pickText(lang, service.category, service.category_en);
@@ -87,11 +100,30 @@ export function FichePrestation({ service }: { service: Service }) {
         <LigneDetail libelle={t("colonne.duree")}>{t("commun.minutes", { min: service.duration })}</LigneDetail>
         <LigneDetail libelle={t("colonne.prix")}><span className="chiffres text-lg font-medium"><Montant valeur={formatPrice(service.price, lang)} /></span></LigneDetail>
         <LigneDetail libelle={t("colonne.categorie")}>{category || t("prestation.sans_categorie")}</LigneDetail>
+        <LigneDetail libelle={t("prestation.en_ligne")}>{service.en_ligne ? t("commun.oui") : t("commun.non")}</LigneDetail>
+        <LigneDetail libelle={t("prestation.supplement_seulement")}>{service.supplement_seulement ? t("commun.oui") : t("commun.non")}</LigneDetail>
         {!commands.manage && <LigneDetail libelle={t("colonne.statut")}>{service.active ? t("prestation.active") : t("prestation.inactive")}</LigneDetail>}
         <div className="@md:col-span-2">
           <LigneDetail libelle={t("prestation.description")}><span className="whitespace-pre-line">{description || EMPTY}</span></LigneDetail>
         </div>
+        <div className="@md:col-span-2">
+          <LigneDetail libelle={t("prestation.supplements_possibles")}>
+            {refs.length === 0 ? EMPTY : (
+              <ol className="space-y-0.5">
+                {refs.map((r) => <li key={`${r.kind}${r.ref_id}`}>{nomRef(r.kind, r.ref_id)}</li>)}
+              </ol>
+            )}
+            <Erreur message={charge.error} />
+          </LigneDetail>
+        </div>
       </dl>
+
+      {commands.manage && (
+        <div className="flex flex-wrap gap-2">
+          {!service.supplement_seulement && <Button variant="outline" className={ACTION} onClick={() => setListe(true)}>{t("prestation.modifier_supplements")}</Button>}
+          {refs.length > 0 && <Button variant="outline" className={ACTION} onClick={() => setRecopie(true)}>{t("prestation.recopier")}</Button>}
+        </div>
+      )}
 
       {commands.manage && (
         <SuppressionFiche
@@ -102,6 +134,8 @@ export function FichePrestation({ service }: { service: Service }) {
       )}
 
       {editing && <CreateService key={service.id} service={service} onClose={() => setEditing(false)} />}
+      {liste && <ListeSupplements service={service} onClose={() => setListe(false)} />}
+      {recopie && <RecopierSupplements service={service} onClose={() => setRecopie(false)} />}
     </div>
   );
 }

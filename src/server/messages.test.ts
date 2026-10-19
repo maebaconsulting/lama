@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { englishFaults, frenchFaults, placeholders, titleCaseFaults } from "../client/i18n/typography.ts";
-import { coded, decode, DICTIONARY, langFromEnv, langOf, message, MessageError, type MessageKey } from "./messages.ts";
+import { coded, decode, DICTIONARY, langFromEnv, langOf, message, MessageError, montant, type MessageKey } from "./messages.ts";
+import { definirDevise } from "../shared/devise-active.ts";
 import { setupApp } from "./test-support.ts";
 
 const keys = Object.keys(DICTIONARY) as MessageKey[];
@@ -91,4 +92,23 @@ test("passe V 1.0 (vague D) : textes anglais du ticket et du serveur, apostrophe
   assert.equal(DICTIONARY["ticket.total_avoir"].fr, "Total de l'avoir");
   assert.deepEqual(keys.filter((k) => /booking/i.test(DICTIONARY[k].en)), []);
   assert.deepEqual(keys.filter((k) => DICTIONARY[k].fr.includes("\u2019")), []);
+});
+
+test("montant() : formaté dans la langue du message et la devise active, même après codage", () => {
+  assert.equal(message("fr", "acompte.plafond", { prevu: montant(25000) }), "L'acompte ne dépasse pas le prix prévu du rendez-vous, suppléments compris (25\u202f000\u00a0F).");
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.equal(message("en", "acompte.plafond", { prevu: montant(2550) }), "The deposit cannot exceed the planned price of the appointment, add-ons included (25.50\u00a0€).");
+    assert.equal(decode("fr", coded("acompte.plafond", { prevu: montant(2550) })), "L'acompte ne dépasse pas le prix prévu du rendez-vous, suppléments compris (25,50\u00a0€).");
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("aucun message ne contient plus « F » ni « francs » en dur", () => {
+  for (const [key, texts] of Object.entries(DICTIONARY)) {
+    for (const text of Object.values(texts as Record<string, string>)) {
+      assert.doesNotMatch(text, /\}\u00a0F\b|\bfrancs?\b/i, key);
+    }
+  }
 });

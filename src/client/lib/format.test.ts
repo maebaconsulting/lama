@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  amountFontSize, EMPTY, formatInstant, formatInstantDate, formatInstantTime, formatLongDate, formatPrice, formatPriceDocument, formatRange,
-  formatShortDate, formatTimestamp, formatTimestampDate, hourLabel, parseAmount, parseSqliteTimestamp, readAmount, splitAmount,
+  amountFontSize, EMPTY, formatInstant, formatInstantDate, formatInstantTime, formatLongDate, formatPrice, formatRange,
+  formatShortDate, formatTimestamp, formatTimestampDate, hourLabel, modeSaisieMontant, parseAmount, parseSqliteTimestamp, readAmount, splitAmount, texteSaisie,
 } from "./format.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
 
 const NBSP = "\u00a0";
 const THIN = "\u202f";
@@ -29,20 +30,15 @@ test("montants en francs, entiers, au même format dans les deux langues", () =>
   assert.equal(formatPrice(null, "en"), `0${NBSP}F`);
 });
 
-test("formatPriceDocument garde « FCFA » en toutes lettres, pour les documents officiels (vague 2)", () => {
-  assert.equal(formatPriceDocument(15000, "fr"), `15${THIN}000${NBSP}FCFA`);
-  assert.equal(formatPriceDocument(15000, "en"), `15${THIN}000${NBSP}FCFA`);
-});
-
 // Relecture finale, constat 1 bis (retour du contrôleur sur le constat 1) : `break-words`
 // coupait « FCFA » au milieu (« FC »/« FA ») à 820 px. Un montant ne doit jamais se couper
 // à l'intérieur du nombre ni de la devise ; seul l'espace entre les deux peut devenir un
 // retour à la ligne. `splitAmount` isole les deux morceaux pour que le composant les
 // enveloppe chacun dans un bloc insécable, séparé par une espace ordinaire cassable.
 test("splitAmount sépare le nombre et « F », jamais ailleurs (constat 1 bis)", () => {
-  assert.deepEqual(splitAmount(formatPrice(1350000, "fr")), [`1${THIN}350${THIN}000`, "F"]);
-  assert.deepEqual(splitAmount(formatPrice(1350000, "en")), [`1${THIN}350${THIN}000`, "F"]);
-  assert.deepEqual(splitAmount(formatPrice(0, "fr")), ["0", "F"]);
+  assert.deepEqual(splitAmount(formatPrice(1350000, "fr")), { avant: "", nombre: `1${THIN}350${THIN}000`, apres: "F" });
+  assert.deepEqual(splitAmount(formatPrice(1350000, "en")), { avant: "", nombre: `1${THIN}350${THIN}000`, apres: "F" });
+  assert.deepEqual(splitAmount(formatPrice(0, "fr")), { avant: "", nombre: "0", apres: "F" });
   assert.equal(splitAmount("185 000"), null, "un texte qui n'est pas un montant formaté ne doit pas être coupé en deux");
   assert.equal(splitAmount(""), null);
 });
@@ -144,4 +140,37 @@ test("un instant en millisecondes s'affiche à l'heure de Douala", () => {
   assert.equal(formatInstant(ms, "fr"), "28/09/2026 09:00");
   assert.equal(formatInstantDate(ms, "en"), "28/09/2026");
   assert.equal(formatInstantTime(ms, "en"), "09:00");
+});
+
+test("splitAmount : symbole après, avant, absent ; signe moins ASCII ou typographique", () => {
+  assert.deepEqual(splitAmount(`15${THIN}000${NBSP}F`), { avant: "", nombre: `15${THIN}000`, apres: "F" });
+  assert.deepEqual(splitAmount(`\u22129${THIN}750${NBSP}F`), { avant: "", nombre: `\u22129${THIN}750`, apres: "F" });
+  definirDevise({ code: "USD", position: null, symboleEcran: true });
+  try {
+    assert.deepEqual(splitAmount(formatPrice(1550, "en")), { avant: "$", nombre: "15.50", apres: "" });
+    assert.deepEqual(splitAmount(formatPrice(-1550, "en")), { avant: "-$", nombre: "15.50", apres: "" });
+    assert.deepEqual(splitAmount(`\u2212${formatPrice(975, "en")}`), { avant: "\u2212$", nombre: "9.75", apres: "" });
+    assert.equal(splitAmount("abc"), null);
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("texteSaisie : texte prérempli relu à l'identique par parseAmount, sans séparateur de milliers ; clavier du champ", () => {
+  assert.equal(texteSaisie(15000, "fr"), "15000");
+  assert.equal(texteSaisie(15000.4, "en"), "15000");
+  assert.equal(texteSaisie(0, "fr"), "0");
+  assert.equal(modeSaisieMontant(), "numeric");
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.equal(texteSaisie(1550, "fr"), "15,50");
+    assert.equal(texteSaisie(150000, "en"), "1500.00");
+    assert.equal(texteSaisie(5, "fr"), "0,05");
+    for (const n of [0, 5, 1550, 150000, 123456789]) {
+      for (const lang of ["fr", "en"] as const) assert.equal(parseAmount(texteSaisie(n, lang)), n, `${n} ${lang}`);
+    }
+    assert.equal(modeSaisieMontant(), "decimal");
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
 });

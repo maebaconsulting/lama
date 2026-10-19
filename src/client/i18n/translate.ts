@@ -2,6 +2,7 @@
  * Traduction de l'interface, sans dépendance au navigateur (testée sous Node).
  * `fr.ts` est la référence ; `en.ts` est typé d'après elle.
  */
+import { deviseActive } from "../../shared/devise-active.ts";
 import { en } from "./en.ts";
 import { fr, type Dictionary, type Key } from "./fr.ts";
 
@@ -24,11 +25,11 @@ export function normalizeLang(value: unknown): Lang {
   return value === "en" ? "en" : "fr";
 }
 
-/** Texte de `key` dans `lang`, `{nom}` remplacé par `values.nom` ; une variable absente reste visible. */
+/** Texte de `key` dans `lang`, `{nom}` remplacé par `values.nom` ; `{devise}` : symbole de la devise active ; une variable absente reste visible. */
 export function translate(lang: Lang, key: Key, values?: Values): string {
   const template = DICTIONARIES[lang][key];
-  if (!values) return template;
-  return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole));
+  const all: Values = { devise: deviseActive().symbole, ...values };
+  return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in all ? String(all[name]) : whole));
 }
 
 const pluralRules = new Map<Lang, Intl.PluralRules>();

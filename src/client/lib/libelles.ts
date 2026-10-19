@@ -50,12 +50,14 @@ export function outboxType(kind: string, lang: Lang): string {
 const AUDIT_ACTIONS = [
   "installation", "connexion", "connexion.poste", "connexion.echec", "connexion.blocage", "deconnexion", "confirmation",
   "compte.creation", "compte.modification", "compte.deblocage", "compte.secret", "poste.declaration", "poste.revocation",
-  "reglage", "envoi.relance", "sauvegarde", "restauration", "facture.emise", "facture.remise_plafond", "avoir.emis", "caisse.cloture", "acompte.encaisse", "acompte.rembourse", "acompte.garde",
+  "reglage", "reglage.devise", "envoi.relance", "sauvegarde", "restauration", "facture.emise", "facture.remise_plafond", "avoir.emis", "caisse.cloture", "acompte.encaisse", "acompte.rembourse", "acompte.garde",
   "whatsapp.session", "whatsapp.manuel", "whatsapp.libre", "whatsapp.document", "whatsapp.produit", "campagne.envoyee", "impression.duplicata", "tiroir.ouverture",
   "sms.essai", "cliente.canal_sms", "logo.depot", "logo.retrait",
   "produit.photo_depot", "produit.photo_retrait", "fidelite.correction", "rdv.transfert",
-  "rdv.suppression", "rdv.note_suppression", "cliente.suppression", "membre.suppression", "prestation.suppression", "prestation.prix",
+  "rdv.suppression", "rdv.note_suppression", "cliente.suppression", "membre.suppression", "prestation.suppression", "prestation.prix", "catalogue.import", "import.clientes", "import.produits", "import.rendez_vous",
   "creneau.suppression", "produit.suppression", "produit.prix", "produit.stock", "heure.reglee", "heure.refus",
+  "en_ligne.confirmation", "en_ligne.autre_horaire", "en_ligne.refus", "en_ligne.cloture", "en_ligne.rendez_vous",
+  "supplement.libre",
 ];
 
 /** Action du journal (code stocké par le serveur) ; un code inconnu est rendu tel quel. */
@@ -75,6 +77,10 @@ const AUDIT_TARGET_KEYS: Record<string, Key> = {
   "institut.adresse": "journal.cible.institut_adresse",
   "institut.telephone": "journal.cible.institut_telephone",
   "institut.langue": "journal.cible.institut_langue",
+  "institut.horaires": "journal.cible.institut_horaires",
+  "institut.devise": "journal.cible.institut_devise",
+  "affichage.symbole_position": "journal.cible.symbole_position",
+  "affichage.symbole_ecran": "journal.cible.symbole_ecran",
   "marque.ecran": "journal.cible.marque_ecran",
   "marque.documents": "journal.cible.marque_documents",
   "caisse.imprimer_logo": "journal.cible.imprimer_logo",
@@ -113,6 +119,15 @@ const AUDIT_TARGET_KEYS: Record<string, Key> = {
   "relances.absence": "journal.cible.relances_absence",
   "relances.absence_jours": "journal.cible.relances_absence_jours",
   "relances.heure": "journal.cible.relances_heure",
+  "en_ligne.active": "journal.cible.en_ligne_active",
+  "en_ligne.horizon_jours": "journal.cible.en_ligne_horizon",
+  "en_ligne.delai_minimal_heures": "journal.cible.en_ligne_delai",
+  "en_ligne.texte_donnees.fr": "journal.cible.en_ligne_texte_fr",
+  "en_ligne.texte_donnees.en": "journal.cible.en_ligne_texte_en",
+  "en_ligne.adresse": "journal.cible.en_ligne_adresse",
+  "en_ligne.theme": "journal.cible.en_ligne_theme",
+  "en_ligne.salon": "journal.cible.en_ligne_salon",
+  "en_ligne.cle": "journal.cible.en_ligne_cle",
   "waha.adresse": "journal.cible.waha_adresse",
   "waha.cle": "journal.cible.waha_cle",
   "waha.session": "journal.cible.waha_session",
@@ -134,6 +149,14 @@ const AUDIT_TARGET_KEYS: Record<string, Key> = {
   "whatsapp.texte.campagne.en": "journal.cible.whatsapp_texte_campagne_en",
   "whatsapp.texte.transfert.fr": "journal.cible.whatsapp_texte_transfert_fr",
   "whatsapp.texte.transfert.en": "journal.cible.whatsapp_texte_transfert_en",
+  "whatsapp.texte.en_ligne_confirmation.fr": "journal.cible.whatsapp_texte_en_ligne_confirmation_fr",
+  "whatsapp.texte.en_ligne_confirmation.en": "journal.cible.whatsapp_texte_en_ligne_confirmation_en",
+  "whatsapp.texte.en_ligne_autre_horaire.fr": "journal.cible.whatsapp_texte_en_ligne_autre_horaire_fr",
+  "whatsapp.texte.en_ligne_autre_horaire.en": "journal.cible.whatsapp_texte_en_ligne_autre_horaire_en",
+  "whatsapp.texte.en_ligne_refus.fr": "journal.cible.whatsapp_texte_en_ligne_refus_fr",
+  "whatsapp.texte.en_ligne_refus.en": "journal.cible.whatsapp_texte_en_ligne_refus_en",
+  "whatsapp.texte.en_ligne_rappel.fr": "journal.cible.whatsapp_texte_en_ligne_rappel_fr",
+  "whatsapp.texte.en_ligne_rappel.en": "journal.cible.whatsapp_texte_en_ligne_rappel_en",
 };
 
 export function auditTarget(target: string, lang: Lang): string {

@@ -9,13 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/provider";
 import {
-  addRefund, completesInvoice, creditBlocker, creditBody, creditPreview, remainingOf, removeRefund, setQuantity, setReason, setRefund, setRestock, startCredit, takeAll, type CreditBlocker, type CreditDraft,
+  addRefund, completesInvoice, creditBlocker, creditBody, creditPreview, draftRows, remainingOf, removeRefund, setQuantity, setReason, setRefund, setRestock, startCredit, supplementsLeft, takeAll, takeSupplements, type CreditBlocker, type CreditDraft,
 } from "@/lib/avoir";
 import { pickText } from "@/lib/bilingual";
 import { aroundAmount, methodLabel, vatLabel } from "@/lib/caisse-texte";
 import type { Invoice, SaleSettings } from "@/lib/caisse-types";
-import { formatAmount, formatPrice } from "@/lib/format";
+import { formatPrice, modeSaisieMontant } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { typeAmount } from "@/lib/saisie-montant";
+import { ChampMontant } from "./champ-montant";
 import { newRequestId } from "@/lib/ticket";
 import { PAYMENT_METHODS, REFERENCE_REQUIRED, type PaymentMethod } from "../../../shared/caisse";
 import type { Key } from "@/i18n/translate";
@@ -86,11 +88,10 @@ export function FormulaireAvoir({ invoice, onClose, onDone }: { invoice: Invoice
           <Button variant="ghost" className="-mr-3" onClick={() => setDraft(takeAll(invoice, draft))}>{t("avoir.tout_reprendre")}</Button>
         </div>
         <ul className="divide-y divide-border border-y border-filet">
-          {draft.lines.map((d) => {
-            const line = invoice.lines.find((l) => l.id === d.line_id)!;
+          {draftRows(invoice, draft).map(({ draft: d, line, supplement }) => {
             const name = pickText(lang, line.label_fr, line.label_en);
             return (
-              <li key={d.line_id} className="space-y-1 py-2">
+              <li key={d.line_id} id={`avoir-ligne-${d.line_id}`} tabIndex={-1} className={cn("space-y-1 py-2", supplement && "pl-4")}>
                 <div className="flex items-center gap-3">
                   <span className="min-w-0 flex-1">
                     <span className="block break-words font-medium">{name}</span>
@@ -104,6 +105,9 @@ export function FormulaireAvoir({ invoice, onClose, onDone }: { invoice: Invoice
                 </div>
                 {line.kind === "product" && (
                   <Case id={`avoir-stock-${d.line_id}`} label={t("avoir.remettre_stock")} checked={d.restock} disabled={d.quantity === 0} onChange={(on) => setDraft(setRestock(invoice, draft, d.line_id, on))} />
+                )}
+                {line.kind === "service" && d.quantity > 0 && supplementsLeft(invoice, draft, line.id) && (
+                  <Button variant="link" className="h-11 px-0" aria-label={t("avoir.reprendre_supplements_de", { designation: name })} onClick={() => { setDraft(takeSupplements(invoice, draft, line.id)); setTimeout(() => document.getElementById(`avoir-ligne-${line.id}`)?.focus(), 0); }}>{t("avoir.reprendre_supplements")}</Button>
                 )}
               </li>
             );
@@ -146,13 +150,14 @@ export function FormulaireAvoir({ invoice, onClose, onDone }: { invoice: Invoice
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor={`avoir-montant-${i}`}>{t("avoir.montant_rembourse")}</Label>
-                  <Input
+                  <ChampMontant
                     id={`avoir-montant-${i}`}
-                    inputMode="numeric"
+                    inputMode={modeSaisieMontant()}
                     className="chiffres-tabulaires text-right"
                     disabled={!several}
-                    value={several ? (r.amount ? formatAmount(r.amount, lang) : "") : formatAmount(preview.total_ttc, lang)}
-                    onInput={(e: Event) => setDraft(setRefund(draft, i, { amount: typeAmount(e, r.amount, lang) }))}
+                    amount={several ? r.amount : preview.total_ttc}
+                    blankZero={several}
+                    onInput={(e: Event, avant: string) => setDraft(setRefund(draft, i, { amount: typeAmount(e, r.amount, lang, avant) }))}
                   />
                 </div>
                 <div className="space-y-1">

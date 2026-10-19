@@ -17,12 +17,13 @@ export type Interval = { start: number; end: number };
 
 /** Something already occupying a staff member's day. */
 export type Busy = {
-  kind: "appointment" | "blocked";
+  /** `demande` : demande en ligne à confirmer (réservation en ligne, spec § 4.4), qui occupe l'agenda sans être un rendez-vous. */
+  kind: "appointment" | "blocked" | "demande";
   start_time: string;
   end_time: string;
   /**
-   * Who or what holds the slot: the client's name, or the reason for the block.
-   * Empty when there is neither: the screen words it in its own language.
+   * Who or what holds the slot: the client's name (the online request's client for a `demande`),
+   * or the reason for the block. Empty when there is neither: the screen words it in its own language.
    */
   label: string;
 };
@@ -37,15 +38,15 @@ export function toMinutes(time: string): number | null {
   return h * 60 + min;
 }
 
-/** Ouverture et fermeture de la grille de l'agenda (décision 6 de la passe V 1.0), en minutes depuis minuit. */
+/** Ouverture et fermeture de la grille de l'agenda (décision 6 de la passe V 1.0, élargie à 23:00 le 18/10/2026), en minutes depuis minuit. */
 export const DAY_OPEN = 7 * 60;
-export const DAY_CLOSE = 21 * 60;
+export const DAY_CLOSE = 23 * 60;
 /** Heure de fermeture, telle que l'affichent les messages. */
-export const CLOSE_TIME = "21:00";
+export const CLOSE_TIME = "23:00";
 
 /**
  * Heure acceptée par le serveur (décision 6) : `hh:mm` sur deux chiffres,
- * de 07:00 à 21:00, minutes multiples de 5, mêmes bornes que la grille de
+ * de 07:00 à 23:00, minutes multiples de 5, mêmes bornes que la grille de
  * l'écran. Rend la clé du refus, ou `null` si l'heure est acceptée.
  */
 export function validTime(time: string): "rdv.heures_format" | "rdv.heures_plage" | null {
@@ -88,9 +89,10 @@ export function findConflicts(start_time: string, end_time: string, busy: Busy[]
  * another slot instead of failing the request back to a human.
  */
 export function describeConflicts(staffName: string, conflicts: Busy[], action: "book" | "block" = "book", lang: Lang = "en"): string {
-  const liste = conflicts
-    .map((c) => `${c.start_time}-${c.end_time} (${c.label || message(lang, c.kind === "blocked" ? "conflit.bloque" : "conflit.autre_rdv")})`)
-    .join(", ");
+  const what = (c: Busy) => (c.kind === "demande"
+    ? message(lang, "conflit.demande", { nom: c.label })
+    : c.label || message(lang, c.kind === "blocked" ? "conflit.bloque" : "conflit.autre_rdv"));
+  const liste = conflicts.map((c) => `${c.start_time}-${c.end_time} (${what(c)})`).join(", ");
   const key = conflicts.every((c) => c.kind === "blocked") ? "conflit.indisponible" : "conflit.rdv";
   return message(lang, key, {
     qui: staffName || message(lang, "conflit.ce_membre"),

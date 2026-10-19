@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { runMigrations } from "../migrations.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
 import { registerFunctions, sqliteStorage } from "../storage.ts";
 import { issueDeposit, parseDepositRequest, parseSettleRequest, settleDeposit } from "./acompte.ts";
 import { issueCreditNote, parseCreditRequest } from "./avoir.ts";
@@ -113,6 +114,12 @@ test("acomptes dans la clôture : reçus le jour de leur encaissement, rembours�
   assert.deepEqual(veille.open.summary.deposits.received, { count: 1, total: 10000 }, "l'acompte de la veille reste dans la veille");
   const text = (lang: "fr" | "en", c = c2) => closingRows(c, {}, lang).filter((r) => r.type === "pair").map((r) => `${(r as { left: string }).left} | ${(r as { right: string }).right}`);
   assert.ok(text("fr", c1).includes("1 acompte reçu | 10\u00a0000\u00a0FCFA"), JSON.stringify(text("fr", c1)));
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.ok(text("fr", c1).includes("1 acompte reçu | 100,00\u00a0EUR"), JSON.stringify(text("fr", c1)));
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
   assert.ok(text("fr").includes("1 acompte remboursé | \u221210\u00a0000\u00a0FCFA"), JSON.stringify(text("fr")));
   assert.ok(text("en").includes("1 deposit refunded | \u221210\u00a0000\u00a0FCFA"));
   assert.ok(!text("fr").some((l) => l.includes("acompte reçu")), "pas de ligne vide d'acomptes reçus");

@@ -20,6 +20,8 @@ import { Journal } from "./journal";
 import { MonCompte } from "./mon-compte";
 import { Postes } from "./postes";
 import { Sauvegardes } from "./sauvegardes";
+import { EnLigne } from "./en-ligne";
+import { Import } from "./import";
 import { Whatsapp } from "./whatsapp";
 
 /** Toutes les rubriques des Réglages (spec 2 § 4). */
@@ -29,6 +31,8 @@ export const RUBRIQUES: Record<SectionId, FunctionComponent> = {
   caisse: Caisse,
   fidelite: Fidelite,
   whatsapp: Whatsapp,
+  "en-ligne": EnLigne,
+  import: Import,
   comptes: Comptes,
   postes: Postes,
   "a-envoyer": AEnvoyer,

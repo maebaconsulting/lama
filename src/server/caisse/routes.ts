@@ -15,7 +15,8 @@ import { decode, localize, msg, requestLang } from "../messages.ts";
 import { publish } from "../realtime.ts";
 import { getSetting } from "../settings.ts";
 import type { StorageBinding } from "../storage.ts";
-import { dayBounds, doualaDay, formatFrancs, type PaymentMethod } from "../../shared/caisse.ts";
+import { dayBounds, doualaDay, type PaymentMethod } from "../../shared/caisse.ts";
+import { formatMontantDocument } from "../../shared/montants.ts";
 import { issueCreditNote, parseCreditRequest } from "./avoir.ts";
 import { checkPractitioner, issueSale, parseSaleRequest, priceSale, SaleError, type SaleRequest, type SaleSettings } from "./vente.ts";
 import { documentLogo, renderTicket } from "./ticket-pdf.ts";
@@ -80,7 +81,7 @@ export async function readInvoice(id: number | string): Promise<Record<string, u
   if (!invoice) return null;
   const lines = await query(
     `SELECT l.id, l.kind, l.ref_id, l.label_fr, l.label_en, l.quantity, l.unit_price, l.line_total, l.staff_id, s.name AS staff_name,
-            l.credited_line_id, l.restock,
+            l.credited_line_id, l.restock, l.parent_line_id,
             COALESCE((SELECT SUM(x.quantity) FROM invoice_lines x WHERE x.credited_line_id = l.id), 0) AS credited
        FROM invoice_lines l LEFT JOIN staff s ON s.id = l.staff_id WHERE l.invoice_id = ? ORDER BY l.id`,
     [id],
@@ -303,10 +304,15 @@ export function mountCaisseRoutes(app: OpenAPIHono<any>): void {
       const invoice = forRole(c, await readInvoice(result.id));
       if (result.replay) return c.json({ invoice }, 200);
       // Mineur 3 (relecture finale) : montants groupés comme à l'écran, plutôt qu'un nombre brut.
-      const target = `${invoice!.number} (${formatFrancs(invoice!.total_ttc as number)}\u00a0F)`;
+      const target = `${invoice!.number} (${formatMontantDocument(invoice!.total_ttc as number, "fr")})`;
       await logAudit({ accountId: account.id, action: "facture.emise", target, ip: clientIp(c), now });
+      // Supplément libre facturé (spec § 3.4) : chacun au journal, numéro et prix d'abord.
+      for (const line of invoice!.lines as { kind: string; label_fr: string; unit_price: number }[]) {
+        if (line.kind !== "libre") continue;
+        await logAudit({ accountId: account.id, action: "supplement.libre", target: `${invoice!.number} · ${formatMontantDocument(line.unit_price, "fr")} · ${line.label_fr}`, ip: clientIp(c), now });
+      }
       if (approvedBy !== null) {
-        await logAudit({ accountId: approvedBy, action: "facture.remise_plafond", target: `${invoice!.number} (${formatFrancs(invoice!.discount_amount as number)}\u00a0F)`, ip: clientIp(c), now });
+        await logAudit({ accountId: approvedBy, action: "facture.remise_plafond", target: `${invoice!.number} (${formatMontantDocument(invoice!.discount_amount as number, "fr")})`, ip: clientIp(c), now });
       }
       // Un acompte déduit au comptoir change aussi la fiche de son rendez-vous (V1-78).
       if (req.appointment_id !== null || req.deposit_id != null) publish({ resource: "appointments" });
@@ -387,7 +393,7 @@ export function mountCaisseRoutes(app: OpenAPIHono<any>): void {
       const result = storage.transaction!((db) => issueCreditNote(db, req, { now, accountId: account.id, identity, requestLang: requestLang(c) }));
       const note = await readInvoice(result.id);
       if (result.replay) return c.json({ credit_note: note }, 200);
-      await logAudit({ accountId: account.id, action: "avoir.emis", target: `${note!.number} (${formatFrancs(note!.total_ttc as number)}\u00a0F, ${note!.credited_number})`, ip: clientIp(c), now });
+      await logAudit({ accountId: account.id, action: "avoir.emis", target: `${note!.number} (${formatMontantDocument(note!.total_ttc as number, "fr")}, ${note!.credited_number})`, ip: clientIp(c), now });
       if (note!.appointment_id !== null) publish({ resource: "appointments" });
       if (req.lines.some((l) => l.restock)) publish({ resource: "products" });
       const printed = (body as { print?: unknown }).print === true ? await printAfterIssue(c, { kind: "credit", id: result.id }) : {};

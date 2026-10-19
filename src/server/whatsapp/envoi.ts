@@ -25,8 +25,8 @@ export const WHATSAPP_KIND = "whatsapp";
 /** Canal choisi sur la fiche cliente (spec du 04/10/2026, § 1). */
 export type Channel = "whatsapp" | "sms" | "none";
 
-/** Nature d'un message de la file ; anniversaire, absence et campagne viennent du mini CRM (décision 22), transfert de la spec du 04/10/2026. */
-export type MessageOrigin = "confirmation" | "rappel" | "ticket" | "libre" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert";
+/** Nature d'un message de la file ; anniversaire, absence et campagne viennent du mini CRM (décision 22), transfert de la spec du 04/10/2026, en_ligne de la réservation en ligne (geste de la réception, ou accusé d'une demande de rappel). */
+export type MessageOrigin = "confirmation" | "rappel" | "ticket" | "libre" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert" | "en_ligne";
 
 export interface WhatsappMessage {
   /** Numéro international, chiffres seuls ; vide si le numéro saisi est impossible à normaliser. */
@@ -44,7 +44,7 @@ export interface WhatsappMessage {
    * relance devenue sans objet ; `campaignId` relie un envoi à sa campagne.
    * Transfert : `staffId`, la praticienne annoncée.
    */
-  origin: { type: MessageOrigin; appointmentId?: number; clientId?: number; at?: number; birthday?: string; lastVisit?: string; campaignId?: number; staffId?: number };
+  origin: { type: MessageOrigin; appointmentId?: number; clientId?: number; at?: number; birthday?: string; lastVisit?: string; campaignId?: number; staffId?: number; demandeId?: number };
 }
 
 /** Messages automatiques (décision 22) : silence respecté, cliente en « Aucun » ignorée, règle « sans objet » à l'envoi. */
@@ -52,6 +52,11 @@ export const AUTOMATIC_TYPES: readonly MessageOrigin[] = ["confirmation", "rappe
 
 export function isAutomatic(m: WhatsappMessage): boolean {
   return AUTOMATIC_TYPES.includes(m.origin.type);
+}
+
+/** Messages soumis au silence à chaque essai : les automatiques, et ceux de la réservation en ligne (geste de la réception ou accusé), sans la règle « sans objet ». */
+export function isSilenced(m: WhatsappMessage): boolean {
+  return isAutomatic(m) || m.origin.type === "en_ligne";
 }
 
 /** Débit (spec § 3, « Débit ») : `ready` pour la file, `sent` à chaque appel au fournisseur ; 2 s après un SMS (spec du 04/10/2026, § 2). */
@@ -198,12 +203,12 @@ export function createWhatsappHandler(
 
   return async (m: WhatsappMessage, ctx: { id: number; now: number; createdAt: number; online: boolean }): Promise<void> => {
     const automatic = isAutomatic(m);
-    if (automatic) {
-      if (await withoutPurpose(m, ctx.now)) {
-        // Marqué « ignoré » ; la file le passe ensuite à « envoyé » sans rien expédier.
-        await run("UPDATE outbox SET manual = 'ignored' WHERE id = ?", [ctx.id]);
-        return;
-      }
+    if (automatic && await withoutPurpose(m, ctx.now)) {
+      // Marqué « ignoré » ; la file le passe ensuite à « envoyé » sans rien expédier.
+      await run("UPDATE outbox SET manual = 'ignored' WHERE id = ?", [ctx.id]);
+      return;
+    }
+    if (isSilenced(m)) {
       const start = await getSetting<string>("whatsapp.silence_debut");
       const end = await getSetting<string>("whatsapp.silence_fin");
       const silenceUntil = silenceEnd(ctx.now, start, end);

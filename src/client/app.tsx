@@ -40,6 +40,7 @@ import { FichePoste } from "./components/reglages/fiche-poste";
 import { Vente } from "./components/caisse/vente";
 import { FicheFacture } from "./components/caisse/fiche-facture";
 import { CaisseJour } from "./components/caisse/caisse-jour";
+import { DemandesEnLigne } from "./components/demandes/demandes-en-ligne";
 import { cn } from "./lib/utils";
 import { inertBehindPanel, panelView, type PanelError, type PanelView } from "./lib/panneau";
 import type { ComponentChildren } from "preact";
@@ -186,6 +187,7 @@ export function App() {
       // Une vente par rendez-vous : l'écran repart de zéro quand l'adresse change de rendez-vous.
       case "vente": return <Vente key={id ?? "comptoir"} appointmentId={id} />;
       case "caisse": return <CaisseJour />;
+      case "demandes": return <DemandesEnLigne />;
       default: return mayOpen(role, "dashboard") ? <Dashboard /> : <Reglages section={null} />;
     }
   };

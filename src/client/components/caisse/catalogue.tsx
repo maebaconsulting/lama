@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n/provider";
 import { matchesSearch, pickText } from "@/lib/bilingual";
 import { formatPrice } from "@/lib/format";
 import { productImageUrl } from "@/lib/produits";
+import { sellableAlone } from "@/lib/supplements";
 import { quantityOf, type Ticket } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 import type { Product, Service } from "../../types";
@@ -110,7 +111,8 @@ export function Catalogue({ services, products, ticket, onAdd }: {
   const [category, setCategory] = useState<string | null>(null);
   const [zoom, setZoom] = useState<Product | null>(null);
 
-  const actives = services.filter((s) => s.active);
+  // « Supplément seulement » (spec du 18/10/2026 § 3.1) : jamais de tuile seule, il s'ajoute sous une prestation.
+  const actives = sellableAlone(services);
   const items = onglet === "services"
     ? actives.map((s) => ({ id: s.id, name: s.name, name_en: s.name_en, category: pickText(lang, s.category, s.category_en), extra: "", s, p: null as Product | null }))
     : (products ?? []).map((p) => ({ id: p.id, name: p.name, name_en: p.name_en, category: pickText(lang, p.category, p.category_en), extra: p.brand, s: null as Service | null, p }));

@@ -185,3 +185,7 @@ test("session refusée (401) pendant la vérification : pas d'erreur non rattrap
   // démonte l'app et ferme alors la connexion, voir use-realtime.ts).
   assert.equal(sources.length, 2);
 });
+
+test("une demande en ligne recharge la liste et l'agenda", () => {
+  assert.deepEqual(new Set(refreshPlan(["demandes_en_ligne"])), new Set(["demandes", "calendar"]));
+});

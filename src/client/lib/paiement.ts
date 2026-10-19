@@ -5,6 +5,10 @@
  * La répartition des versements est celle du serveur (`settle`, calculs partagés).
  */
 import { quickAmounts, REFERENCE_REQUIRED, settle, type PaymentMethod, type Settlement } from "../../shared/caisse.ts";
+import type { Lang } from "../i18n/translate.ts";
+import { deviseActive } from "../../shared/devise-active.ts";
+import { formatEntier, separateurDecimal } from "../../shared/montants.ts";
+import { formatAmount } from "./format.ts";
 
 export interface PaymentEntry {
   method: PaymentMethod;
@@ -16,6 +20,19 @@ export interface PaymentEntry {
    * première touche du pavé le remplace au lieu de s'y ajouter.
    */
   proposed: boolean;
+  /**
+   * Chiffres déjà tapés après la virgule (devise à centimes, 0 juste après la
+   * virgule). Clé absente pendant la saisie de la partie entière : les
+   * versements se comparent alors tels qu'avant le chantier.
+   */
+  fraction?: number;
+}
+
+/** Versement sans la clé `fraction` (partie entière, montant rapide). */
+function sansFraction(e: PaymentEntry): PaymentEntry {
+  const copie = { ...e };
+  delete copie.fraction;
+  return copie;
 }
 
 export interface PaymentDraft {
@@ -26,9 +43,14 @@ export interface PaymentDraft {
   active: number | null;
 }
 
-/** Touches du pavé, dans l'ordre d'affichage (trois colonnes). */
+/** Touches du pavé d'une devise sans centimes, dans l'ordre d'affichage (trois colonnes). */
 export const PAD_KEYS = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "000", "0", "effacer"] as const;
-export type PadKey = (typeof PAD_KEYS)[number];
+export type PadKey = (typeof PAD_KEYS)[number] | "virgule";
+
+/** Touches du pavé dans la devise active : « 000 » sans centimes, « virgule » avec. */
+export function padKeys(): readonly PadKey[] {
+  return deviseActive().decimales === 0 ? PAD_KEYS : PAD_KEYS.map((k) => (k === "000" ? "virgule" : k));
+}
 
 /**
  * Où tombe une frappe du clavier physique : `champ` (saisie de texte, comme la
@@ -47,12 +69,13 @@ export type KeyPlace = "champ" | "fenetre" | "pave" | "controle" | "libre";
 export function padAction(e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, place: KeyPlace): PadKey | "valider" | null {
   if (place === "champ" || place === "fenetre" || e.ctrlKey || e.metaKey || e.altKey) return null;
   if (/^[0-9]$/.test(e.key)) return e.key as PadKey;
+  if ((e.key === "," || e.key === ".") && deviseActive().decimales > 0) return "virgule";
   if (e.key === "Backspace") return "effacer";
   if (e.key === "Enter") return place === "controle" ? null : "valider";
   return null;
 }
 
-/** Neuf chiffres au plus : aucune saisie ne dépasse 999 999 999 francs. */
+/** Aucune saisie ne dépasse 999 999 999 unités mineures. */
 const MAX_AMOUNT = 999_999_999;
 
 /** Premier paiement : espèces si la gérante les propose, sinon le premier moyen activé. */
@@ -91,14 +114,52 @@ export function pressKey(d: PaymentDraft, key: PadKey, due: number): PaymentDraf
   if (draft.active === null) draft = chooseMethod({ ...draft, active: null }, draft.method, due);
   const index = draft.active!;
   const entry = draft.entries[index];
+  const dec = deviseActive().decimales;
+  const k = 10 ** dec;
   const base = entry.proposed ? 0 : entry.amount;
+  let fraction: number | null = entry.proposed ? null : entry.fraction ?? null;
   let amount: number;
-  if (key === "effacer") amount = entry.proposed ? 0 : Math.floor(base / 10);
-  else if (key === "000") amount = base * 1000;
-  else amount = base * 10 + Number(key);
+  if (key === "effacer") {
+    if (entry.proposed) amount = 0;
+    else if (fraction === null) amount = Math.floor(base / (10 * k)) * k;
+    else if (fraction === 0) { amount = base; fraction = null; }
+    else {
+      const unit = 10 ** (dec - fraction);
+      amount = base - (Math.floor(base / unit) % 10) * unit;
+      fraction -= 1;
+    }
+  } else if (key === "000") {
+    if (dec > 0) return draft;
+    amount = base * 1000;
+  } else if (key === "virgule") {
+    if (dec === 0 || fraction !== null) return draft;
+    amount = base;
+    fraction = 0;
+  } else if (fraction === null) {
+    amount = base * 10 + Number(key) * k;
+  } else {
+    if (fraction >= dec) return draft;
+    amount = base + Number(key) * 10 ** (dec - fraction - 1);
+    fraction += 1;
+  }
   if (amount > MAX_AMOUNT) return draft;
-  const entries = draft.entries.map((e, i) => (i === index ? { ...e, amount, proposed: false } : e));
+  const entries = draft.entries.map((e, i) => {
+    if (i !== index) return e;
+    return fraction === null ? { ...sansFraction(e), amount, proposed: false } : { ...e, amount, proposed: false, fraction };
+  });
   return { ...draft, entries };
+}
+
+/**
+ * Afficheur du pavé : le montant (`formatAmount`) ; pendant la saisie des
+ * décimales, ce qui a été tapé, virgule comprise : « 15, », « 15,5 », « 15,50 ».
+ */
+export function saisiePave(e: Pick<PaymentEntry, "amount" | "fraction">, lang: Lang): string {
+  const d = deviseActive();
+  if (e.fraction === undefined || d.decimales === 0) return formatAmount(e.amount, lang);
+  const k = 10 ** d.decimales;
+  const tapes = String(e.amount % k).padStart(d.decimales, "0").slice(0, e.fraction);
+  return `${formatEntier(Math.floor(e.amount / k))}${separateurDecimal(lang)}${tapes}`;
 }
 
 /**
@@ -116,7 +177,7 @@ export function cashSuggestions(d: PaymentDraft, due: number): number[] {
 export function setTendered(d: PaymentDraft, amount: number, due: number): PaymentDraft {
   const draft = d.active !== null && d.entries[d.active].method === "cash" ? d : chooseMethod(d, "cash", due);
   const index = draft.active!;
-  return { ...draft, entries: draft.entries.map((e, i) => (i === index ? { ...e, amount, proposed: true } : e)) };
+  return { ...draft, entries: draft.entries.map((e, i) => (i === index ? { ...sansFraction(e), amount, proposed: true } : e)) };
 }
 
 export function setReference(d: PaymentDraft, index: number, reference: string): PaymentDraft {

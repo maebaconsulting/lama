@@ -1,0 +1,1644 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Contrat lama v1 : réservation en ligne",
+    "version": "1.0.0",
+    "description": "Contrat entre lama et une application de réservation, salon par salon (X-Lama-Institut). La signature, le découpage des plages et la capacité « Sans préférence » sont décrits dans contrat-v1.md."
+  },
+  "servers": [
+    {
+      "url": "https://reserver.exemple.com/lama/v1"
+    }
+  ],
+  "security": [
+    {
+      "X-Lama-Institut": [],
+      "X-Lama-Horodatage": [],
+      "X-Lama-Signature": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "X-Lama-Institut": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Lama-Institut"
+      },
+      "X-Lama-Horodatage": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Lama-Horodatage"
+      },
+      "X-Lama-Signature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Lama-Signature"
+      }
+    },
+    "schemas": {
+      "Etat": {
+        "type": "object",
+        "properties": {
+          "contrat": {
+            "type": "string",
+            "enum": [
+              "v1"
+            ]
+          },
+          "application": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nom",
+              "version"
+            ]
+          },
+          "version_offre": {
+            "type": "integer",
+            "nullable": true
+          },
+          "version_disponibilites": {
+            "type": "integer",
+            "nullable": true
+          },
+          "demandes_en_attente": {
+            "type": "integer"
+          },
+          "mode_essai": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "contrat",
+          "application",
+          "version_offre",
+          "version_disponibilites",
+          "demandes_en_attente",
+          "mode_essai"
+        ]
+      },
+      "Erreur": {
+        "type": "object",
+        "properties": {
+          "erreur": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "erreur"
+        ]
+      },
+      "Theme": {
+        "type": "object",
+        "properties": {
+          "fond": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "accent": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "police": {
+            "type": "string",
+            "enum": [
+              "lama",
+              "classique",
+              "elegante",
+              "moderne"
+            ]
+          }
+        },
+        "required": [
+          "fond",
+          "accent",
+          "police"
+        ]
+      },
+      "Horaires": {
+        "type": "object",
+        "properties": {
+          "lun": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "mar": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "mer": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "jeu": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "ven": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "sam": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          },
+          "dim": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "lun",
+          "mar",
+          "mer",
+          "jeu",
+          "ven",
+          "sam",
+          "dim"
+        ]
+      },
+      "Offre": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "institut": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "fuseau": {
+                "type": "string"
+              },
+              "telephone": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "logo": {
+                "type": "string",
+                "nullable": true,
+                "pattern": "^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$",
+                "default": null
+              },
+              "devise": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "decimales": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "symbole": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8
+                  },
+                  "position": {
+                    "type": "string",
+                    "enum": [
+                      "avant",
+                      "apres"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "decimales",
+                  "symbole",
+                  "position"
+                ]
+              },
+              "langues": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "fr",
+                    "en"
+                  ]
+                },
+                "minItems": 1
+              },
+              "texte_donnees": {
+                "type": "object",
+                "properties": {
+                  "fr": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "en": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "fr",
+                  "en"
+                ]
+              },
+              "theme": {
+                "$ref": "#/components/schemas/Theme"
+              },
+              "horaires": {
+                "$ref": "#/components/schemas/Horaires"
+              }
+            },
+            "required": [
+              "nom",
+              "fuseau",
+              "telephone",
+              "devise",
+              "langues",
+              "texte_donnees"
+            ]
+          },
+          "prestations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "nom": {
+                  "type": "object",
+                  "properties": {
+                    "fr": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "en": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "fr",
+                    "en"
+                  ]
+                },
+                "categorie": {
+                  "type": "object",
+                  "properties": {
+                    "fr": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "en": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "fr",
+                    "en"
+                  ]
+                },
+                "description": {
+                  "type": "object",
+                  "properties": {
+                    "fr": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "en": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "fr",
+                    "en"
+                  ]
+                },
+                "duree": {
+                  "type": "integer",
+                  "minimum": 5,
+                  "maximum": 720
+                },
+                "prix": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "id",
+                "nom",
+                "categorie",
+                "description",
+                "duree",
+                "prix"
+              ]
+            },
+            "maxItems": 500
+          },
+          "praticiennes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "prenom": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                },
+                "photo": {
+                  "type": "string",
+                  "nullable": true,
+                  "pattern": "^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$",
+                  "default": null
+                },
+                "prestations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "maxItems": 500
+                }
+              },
+              "required": [
+                "id",
+                "prenom",
+                "prestations"
+              ]
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "version",
+          "institut",
+          "prestations",
+          "praticiennes"
+        ]
+      },
+      "Disponibilites": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "genere_le": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "du": {
+            "type": "string"
+          },
+          "au": {
+            "type": "string"
+          },
+          "pas": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 60
+          },
+          "delai_minimal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10080
+          },
+          "plages": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "maxItems": 10
+              }
+            }
+          }
+        },
+        "required": [
+          "version",
+          "genere_le",
+          "du",
+          "au",
+          "pas",
+          "delai_minimal",
+          "plages"
+        ]
+      },
+      "Demande": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "curseur": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "creneau",
+              "rappel"
+            ]
+          },
+          "recue_le": {
+            "type": "integer"
+          },
+          "prestation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "praticienne": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "date": {
+            "type": "string",
+            "nullable": true
+          },
+          "heure": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "souhait": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "jours": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "lun",
+                    "mar",
+                    "mer",
+                    "jeu",
+                    "ven",
+                    "sam",
+                    "dim"
+                  ]
+                },
+                "maxItems": 7
+              },
+              "moments": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "matin",
+                    "apres_midi",
+                    "soir"
+                  ]
+                },
+                "maxItems": 3
+              },
+              "precision": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "jours",
+              "moments",
+              "precision"
+            ]
+          },
+          "cliente": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^(?=.{1,120}$)(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,7}$"
+              },
+              "prenom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,2}$"
+              },
+              "telephone": {
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "langue": {
+                "type": "string",
+                "enum": [
+                  "fr",
+                  "en"
+                ]
+              }
+            },
+            "required": [
+              "nom",
+              "telephone",
+              "langue"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "acompte": {
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "curseur",
+          "type",
+          "recue_le",
+          "prestation",
+          "praticienne",
+          "date",
+          "heure",
+          "souhait",
+          "cliente",
+          "note",
+          "acompte"
+        ]
+      },
+      "Decision": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "acceptee",
+              "autre_horaire",
+              "refusee",
+              "traitee"
+            ]
+          },
+          "horaire": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "heure": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "praticienne": {
+                "type": "string",
+                "maxLength": 60
+              }
+            },
+            "default": null,
+            "required": [
+              "date",
+              "heure",
+              "praticienne"
+            ]
+          },
+          "message": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "fr": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "en": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "default": null,
+            "required": [
+              "fr",
+              "en"
+            ]
+          },
+          "issue": {
+            "type": "string",
+            "enum": [
+              "rdv_pris",
+              "injoignable",
+              "sans_suite"
+            ]
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "DemandeEntrante": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "creneau",
+              "rappel"
+            ]
+          },
+          "prestation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "praticienne": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "date": {
+            "type": "string",
+            "nullable": true
+          },
+          "heure": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "souhait": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "jours": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "lun",
+                    "mar",
+                    "mer",
+                    "jeu",
+                    "ven",
+                    "sam",
+                    "dim"
+                  ]
+                },
+                "maxItems": 7
+              },
+              "moments": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "matin",
+                    "apres_midi",
+                    "soir"
+                  ]
+                },
+                "maxItems": 3
+              },
+              "precision": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "jours",
+              "moments",
+              "precision"
+            ]
+          },
+          "cliente": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^(?=.{1,120}$)(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,7}$"
+              },
+              "prenom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,2}$"
+              },
+              "telephone": {
+                "type": "string",
+                "pattern": "^\\+[1-9]\\d{6,14}$"
+              },
+              "langue": {
+                "type": "string",
+                "enum": [
+                  "fr",
+                  "en"
+                ]
+              }
+            },
+            "required": [
+              "nom",
+              "telephone",
+              "langue"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "default": ""
+          }
+        },
+        "required": [
+          "type",
+          "prestation",
+          "praticienne",
+          "date",
+          "heure",
+          "souhait",
+          "cliente"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/etat": {
+      "get": {
+        "summary": "Vérifier la liaison",
+        "responses": {
+          "200": {
+            "description": "État de l'application pour ce salon",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Etat"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/offre": {
+      "put": {
+        "summary": "Publier l'offre",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Offre"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document en place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version plus ancienne que celle en place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corps de plus de 1 Mo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/disponibilites": {
+      "put": {
+        "summary": "Publier les plages libres",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Disponibilites"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document en place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version plus ancienne que celle en place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corps de plus de 1 Mo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demandes": {
+      "get": {
+        "summary": "Relever les demandes non accusées",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}$"
+            },
+            "required": false,
+            "name": "apres",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limite",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Demandes et curseur à repasser au relevé suivant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "demandes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Demande"
+                      }
+                    },
+                    "curseur": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "demandes",
+                    "curseur"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demandes/{id}/accuse": {
+      "post": {
+        "summary": "Accuser une demande enregistrée par lama",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "d_7Kq2"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accusé enregistré, données de la cliente effacées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Demande inconnue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demandes/{id}/decision": {
+      "post": {
+        "summary": "Rendre la décision",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "d_7Kq2"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Décision enregistrée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "decision": {
+                      "type": "string",
+                      "enum": [
+                        "acceptee",
+                        "autre_horaire",
+                        "refusee",
+                        "traitee"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "decision"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Demande inconnue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corps de plus de 1 Mo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/essai/demande": {
+      "post": {
+        "summary": "Mode essai : déposer une demande comme une cliente",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemandeEntrante"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Demande enregistrée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "jeton": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "jeton"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Salon pas en mode essai",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Demande refusée : ferme, inconnue, rappel_seulement ou indisponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corps de plus de 1 Mo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/essai/demande/{id}": {
+      "get": {
+        "summary": "Mode essai : état brut d'une demande",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "example": "d_7Kq2"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Demande",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "cliente": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "nom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "^(?=.{1,120}$)(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,7}$"
+                        },
+                        "prenom": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "pattern": "^(?=.*\\p{L})[\\p{L}\\p{M}'’-]+\\.?(?: [\\p{L}\\p{M}'’-]+\\.?){0,2}$"
+                        },
+                        "telephone": {
+                          "type": "string",
+                          "pattern": "^\\+[1-9]\\d{6,14}$"
+                        },
+                        "langue": {
+                          "type": "string",
+                          "enum": [
+                            "fr",
+                            "en"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "nom",
+                        "telephone",
+                        "langue"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "accusee_le": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "decision": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Decision"
+                        },
+                        {
+                          "nullable": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "cliente",
+                    "note",
+                    "accusee_le",
+                    "decision"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature, horodatage ou salon refusés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Salon suspendu sur l'application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Demande inconnue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne (code interne)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

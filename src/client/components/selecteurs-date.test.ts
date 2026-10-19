@@ -19,7 +19,7 @@ test("ChampHeure : liste déroulante native de créneaux (SELECT : 16 px, 44 px)
   assert.match(champ, /borne\?: Borne/);
 });
 
-test("heure de fin du blocage : créneaux de fin (07:15 à 21:00)", () => {
+test("heure de fin du blocage : créneaux de fin (07:15 à 23:00)", () => {
   const view = read("./agenda/bloquer-creneau.tsx");
   assert.match(view, /<ChampHeure id="block-end" borne="fin"/);
   assert.match(read("./agenda/grille.tsx"), /DAY_START_HOUR/, "l'agenda lit les bornes de la journée dans lib/creneaux.ts");

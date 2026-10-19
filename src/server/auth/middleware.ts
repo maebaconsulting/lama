@@ -92,6 +92,14 @@ export function readCookie(c: Context, base: string): { value: string | undefine
   return { value: undefined, nu };
 }
 
+/**
+ * Vrai si la requête porte un cookie de session de lama, sous son nom de l'écoute ou nu (passage de http
+ * à https), sans le juger ni rien effacer : sert seulement à borner un corps avant l'authentification.
+ */
+export function porteCookieSession(c: Context): boolean {
+  return getCookie(c, cookieName(c, SESSION_COOKIE)) !== undefined || getCookie(c, nomCookie(SESSION_COOKIE)) !== undefined;
+}
+
 /** Retient le nouveau jeton promu pour le reste de la requête (`readCookie`). */
 function promouvoir(c: Context, base: string, token: string): void {
   const map = promus.get(c) ?? new Map<string, string>();

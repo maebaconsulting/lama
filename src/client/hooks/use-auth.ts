@@ -8,6 +8,9 @@ import type { AuthState } from "../lib/auth-types";
 import { refusEcranPerime, screenFor, type Screen } from "../lib/gate";
 import { onSessionSignal } from "../lib/session-bus";
 import { useRefresh } from "./use-refresh";
+import { configDevise, definirDevise } from "../../shared/devise-active.ts";
+import { ALL_KEYS } from "../lib/realtime";
+import { emitRefresh } from "../lib/refresh-bus";
 
 const MAINTENANCE_POLL_MS = 3000;
 
@@ -38,6 +41,10 @@ export function useAuthGate(): AuthGate {
   const reload = useCallback(async () => {
     try {
       const next = await api<AuthState>("GET", "/api/auth/state");
+      // Devise de l'institut (spec du 15/10/2026) : posée avant le rendu ; un changement relit toutes les données affichées.
+      const avant = JSON.stringify(configDevise());
+      if (next.devise) definirDevise(next.devise);
+      if (JSON.stringify(configDevise()) !== avant) emitRefresh(ALL_KEYS);
       setState(next);
       setUnreachable(false);
       setRefus(null);

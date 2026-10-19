@@ -8,8 +8,11 @@ import { clientIp, cookieName, cookieOptions, currentAccount, readCookie, SESSIO
 import { logAudit } from "../audit.ts";
 import { nowOf } from "../clock.ts";
 import { msg } from "../messages.ts";
-import { crmActive, getSetting } from "../settings.ts";
+import { crmActive, getSetting, setSetting } from "../settings.ts";
+import { chargerDevise } from "../devise.ts";
+import { DEVISE_DEFAUT, estCodeDevise } from "../../shared/devises.ts";
 import { logoVersions } from "../institut/logos.ts";
+import { configDevise } from "../../shared/devise-active.ts";
 import { estDemoPublique, estFormation } from "../formation/mode.ts";
 import { COMPTES_DEMO } from "../formation/demo.ts";
 
@@ -49,6 +52,7 @@ export function mountAuthRoutes(app: OpenAPIHono<any>): void {
         nom: await getSetting<string>("institut.nom"),
         logos: await logoVersions(),
       },
+      devise: configDevise(),
       // Interrupteur général du mini CRM, pour l'écran de chaque rôle (la praticienne et la réception n'ont pas
       // accès à /api/settings) ; seulement une fois connecté.
       crm: account ? { active: await crmActive() } : null,
@@ -64,6 +68,8 @@ export function mountAuthRoutes(app: OpenAPIHono<any>): void {
     if (estFormation()) return c.json({ error: msg(c, "formation.installation"), code: "formation" }, 409);
     if ((await countAccounts()) > 0) return c.json({ error: msg(c, "installation.deja_faite") }, 409);
     const b = await body(c);
+    const devise = b.devise === undefined ? DEVISE_DEFAUT : b.devise;
+    if (!estCodeDevise(devise)) return c.json({ error: msg(c, "reglage.devise") }, 400);
     try {
       // Insertion conditionnelle : deux installations simultanées passent
       // toutes deux le test ci-dessus, une seule crée l'administrateur.
@@ -72,6 +78,10 @@ export function mountAuthRoutes(app: OpenAPIHono<any>): void {
         password: String(b.password ?? ""), pin: b.pin ? String(b.pin) : null,
         language: b.language === undefined ? undefined : (String(b.language) as Language),
       }, nowOf(c), { onlyIfEmpty: true });
+      await setSetting("institut.devise", devise, account.id, nowOf(c));
+      await chargerDevise();
+      // Import différé : seed.ts importe « ./db.js », qui ne se résout qu'assemblé (les essais qui chargent ce module sans assemblage doivent pouvoir le faire).
+      await (await import("../seed.ts")).convertirFichesDemo(devise);
       const { token } = await createSession(account.id, "personnel", null, nowOf(c));
       setSessionCookie(c, token, "personnel");
       await logAudit({ accountId: account.id, action: "installation", target: account.login, ip: clientIp(c), now: nowOf(c) });

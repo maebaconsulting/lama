@@ -11,6 +11,7 @@ import { runMigrations } from "../migrations.ts";
 import { registerFunctions, sqliteStorage } from "../storage.ts";
 import { authenticatePassword } from "../auth/accounts.ts";
 import { ecrireComptesFormation, retablirComptesFormation } from "./comptes.ts";
+import { prixDemo } from "../../shared/devises.ts";
 
 /** Base de formation (distribution D-16) : démonstration semée au premier démarrage, quatre comptes créés par le technicien. */
 
@@ -19,9 +20,9 @@ const CLI = cliBundle();
 const MOTS = ["admin-formation-1", "gerante-formation-1", "reception-formation-1", "praticienne-form-1"];
 
 /** Lance `cli formation-comptes` sur un dossier jetable, les mots de passe sur l'entrée standard. */
-function cliComptes(entree: string, env: Record<string, string>, dir = mkdtempSync(join(tmpdir(), "lama-formation-cli-"))) {
+function cliComptes(entree: string, env: Record<string, string>, dir = mkdtempSync(join(tmpdir(), "lama-formation-cli-")), options: string[] = []) {
   const vars = { ...process.env, LAMA_DEV: "1", LAMA_DATA_DIR: dir, LAMA_CONFIG_DIR: join(dir, "config"), LAMA_LANGUE: "fr", LAMA_DEMO: "0", LAMA_DEMO_HISTORY: "1", ...env };
-  return { ...spawnSync(process.execPath, ["--no-warnings", CLI, "formation-comptes"], { input: entree, env: vars, encoding: "utf8" }), dir };
+  return { ...spawnSync(process.execPath, ["--no-warnings", CLI, "formation-comptes", ...options], { input: entree, env: vars, encoding: "utf8" }), dir };
 }
 
 /** Base en mémoire migrée, branchée sur @clawnify/db, avec la fiche de praticienne n° 1 de la démonstration. */
@@ -135,4 +136,55 @@ test("cli formation-comptes : refusée sur les dossiers de la vraie base, même 
   assert.equal(config.status, 1);
   assert.match(config.stderr, /vraie base/);
   assert.equal(existsSync(join(dir, "lama.db")), false, "rien d'écrit");
+});
+
+/** Réglage tel qu'écrit en base, relu en JSON ; `undefined` sans ligne. */
+const reglage = (db: DatabaseSync, key: string) => {
+  const ligne = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return ligne ? (JSON.parse(ligne.value) as unknown) : undefined;
+};
+
+test("cli formation-comptes --devise EUR : réglages écrits avant le semis, démonstration et historique en euros, devise figée en EUR", () => {
+  const r = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" }, undefined, ["--devise", "EUR", "--position", "avant", "--symbole-ecran", "non"]);
+  assert.equal(r.status, 0, r.stderr);
+  const db = new DatabaseSync(join(r.dir, "lama.db"));
+  try {
+    assert.equal(reglage(db, "institut.devise"), "EUR");
+    assert.equal(reglage(db, "affichage.symbole_position"), "avant");
+    assert.equal(reglage(db, "affichage.symbole_ecran"), false);
+    const prix = (sql: string) => (db.prepare(sql).get() as { p: number }).p;
+    assert.equal(prix("SELECT price AS p FROM services WHERE id = 1"), prixDemo(25000, "EUR"));
+    assert.equal(prix("SELECT cost AS p FROM products WHERE id = 1"), prixDemo(2500, "EUR"));
+    assert.ok((db.prepare("SELECT COUNT(*) AS n FROM invoices").get() as { n: number }).n > 20, "historique semé");
+    assert.equal(prix("SELECT MIN(unit_price) AS p FROM invoice_lines WHERE kind = 'service' AND ref_id = 1"), prixDemo(25000, "EUR"), "historique facturé en euros");
+    assert.throws(() => db.prepare("UPDATE settings SET value = '\"XAF\"' WHERE key = 'institut.devise'").run(), /Devise figée/);
+  } finally {
+    db.close();
+  }
+  // Relancée (mots de passe changés), la commande garde la devise et le dit si on en demande une autre.
+  const relance = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" }, r.dir, ["--devise", "USD"]);
+  assert.equal(relance.status, 0, relance.stderr);
+  assert.match(relance.stdout, /garde sa devise, EUR, déjà figée par ses ventes\u00a0: USD n'est pas appliquée/);
+});
+
+test("cli formation-comptes : devise inconnue ou option refusée avant toute écriture ; sans option, XAF", () => {
+  const inconnue = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" }, undefined, ["--devise", "ABC"]);
+  assert.equal(inconnue.status, 1);
+  assert.match(inconnue.stderr, /Devise inconnue\u00a0: ABC\. Codes acceptés\u00a0: XAF, /);
+  assert.equal(existsSync(join(inconnue.dir, "lama.db")), false, "rien d'écrit");
+  const position = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" }, undefined, ["--position", "milieu"]);
+  assert.equal(position.status, 1);
+  assert.match(position.stderr, /Valeur refusée pour --position\u00a0: milieu/);
+  const seule = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" }, undefined, ["--devise"]);
+  assert.equal(seule.status, 1);
+  assert.match(seule.stderr, /Option inconnue ou sans valeur\u00a0: --devise/);
+  const sans = cliComptes(`${MOTS.join("\n")}\n`, { LAMA_FORMATION: "1" });
+  assert.equal(sans.status, 0, sans.stderr);
+  const db = new DatabaseSync(join(sans.dir, "lama.db"));
+  try {
+    assert.equal(reglage(db, "institut.devise"), undefined, "défaut du code : XAF");
+    assert.equal((db.prepare("SELECT price FROM services WHERE id = 1").get() as { price: number }).price, 25000);
+  } finally {
+    db.close();
+  }
 });

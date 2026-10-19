@@ -5,7 +5,7 @@
  */
 import type { Key } from "../i18n/translate.ts";
 
-export type PrintKind = "invoice" | "credit" | "deposit";
+export type PrintKind = "invoice" | "credit" | "deposit" | "closing";
 
 /** Ce que le serveur ajoute au document émis avec `print: true`. */
 export interface PrintOutcome {

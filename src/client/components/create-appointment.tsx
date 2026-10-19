@@ -15,7 +15,14 @@ import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { todayAt } from "@/lib/calendrier";
 import { byCategory } from "@/lib/prestations";
+import { parPrestations } from "@/lib/praticiennes";
+import { sellableAlone, supplementPayload, type DraftSupplement } from "@/lib/supplements";
+import { bookingTotals, withoutDrafts } from "@/lib/supplements-rdv";
+import { api } from "../api";
+import { useLoad } from "../hooks/use-load";
+import type { Product } from "../types";
 import { Erreur, useAmenerALaVue } from "./champ";
+import { ChoixSupplements } from "./supplements/choix";
 
 interface Props {
   onClose: () => void;
@@ -35,6 +42,11 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
   const [date, setDate] = useState(defaultDate || todayAt());
   const [startTime, setStartTime] = useState(defaultTime || "09:00");
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
+  // Suppléments sous chaque prestation choisie (spec du 18/10/2026 § 3.3), par identifiant de prestation.
+  const [drafts, setDrafts] = useState<Record<number, DraftSupplement[]>>({});
+  const charge = useLoad(() => api<{ products: Product[] }>("GET", "/api/products?limit=1000"), ["products"]);
+  const catalog = { services, products: charge.data?.products ?? [] };
+  const { pratiquent, autres } = parPrestations(staffLookup, selectedServices);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,18 +55,13 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
 
   const toggleService = (id: number) => {
     setConflicts(null);
+    if (selectedServices.includes(id)) setDrafts(withoutDrafts(drafts, id));
     setSelectedServices((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
   };
 
-  const totalPrice = services
-    .filter((s) => selectedServices.includes(s.id))
-    .reduce((sum, s) => sum + s.price, 0);
-
-  const totalDuration = services
-    .filter((s) => selectedServices.includes(s.id))
-    .reduce((sum, s) => sum + s.duration, 0);
+  const { price: totalPrice, minutes: totalDuration } = bookingTotals(services, selectedServices, drafts);
 
   const handleSubmit = async (allowConflict = false) => {
     setError(null);
@@ -70,6 +77,7 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
         start_time: startTime,
         notes,
         service_ids: selectedServices,
+        supplements: selectedServices.flatMap((id, index) => (drafts[id] ?? []).map((d) => ({ service_index: index, ...supplementPayload(d) }))),
         ...(allowConflict ? { allow_conflict: true } : {}),
       });
       onClose();
@@ -103,7 +111,14 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
               <Label htmlFor="nr-membre">{t("rdv.praticienne")}</Label>
               <select id="nr-membre" className={SELECT} value={staffId} onChange={(e) => { setStaffId((e.target as HTMLSelectElement).value); setConflicts(null); }}>
                 <option value="">{t("commun.non_attribue")}</option>
-                {staffLookup.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {autres.length === 0 || pratiquent.length === 0
+                  ? staffLookup.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
+                  : (
+                    <>
+                      <optgroup label={t("rdv.pratiquent")}>{pratiquent.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>
+                      <optgroup label={t("rdv.autres_praticiennes")}>{autres.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>
+                    </>
+                  )}
               </select>
             </div>
           </div>
@@ -121,7 +136,7 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
           {/* Revue impeccable (G4) : liste pleine largeur par catégorie, nom à gauche, durée et prix alignés à droite. */}
           <fieldset className="min-w-0 space-y-3">
             <legend className="etiquette mb-1.5 text-encre-grise">{t("menu.prestations")}</legend>
-            {byCategory(services, lang).map((group) => (
+            {byCategory(sellableAlone(services), lang).map((group) => (
               <div key={group.category} className="space-y-1">
                 {group.category && <p className="font-serif text-base leading-tight">{group.category}</p>}
                 <ul className="divide-y divide-border rounded-sm border border-filet">
@@ -152,6 +167,19 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
                 </ul>
               </div>
             ))}
+            {selectedServices.map((id) => {
+              const svc = services.find((s) => s.id === id);
+              return svc && (
+                <ChoixSupplements
+                  key={id}
+                  serviceId={id}
+                  nom={pickText(lang, svc.name, svc.name_en)}
+                  list={drafts[id] ?? []}
+                  catalog={catalog}
+                  onChange={(next) => { setConflicts(null); setError(null); setDrafts({ ...drafts, [id]: next }); }}
+                />
+              );
+            })}
             {selectedServices.length > 0 && (
               <p className="text-sm font-medium" aria-live="polite">
                 {t("rdv.total_ligne", { duree: t("commun.minutes", { min: totalDuration }), prix: formatPrice(totalPrice, lang) })}
@@ -181,6 +209,7 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
           </div>
         )}
         <Erreur message={error} />
+        <Erreur message={charge.error} />
         <DialogFooter>
           <Button variant="outline" disabled={saving} onClick={onClose}>{t("commun.annuler")}</Button>
           {conflicts && (

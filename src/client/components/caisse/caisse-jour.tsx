@@ -12,7 +12,7 @@ import { useI18n } from "@/i18n/provider";
 import { canClose, differenceOf, documentGroups, movedMethods, parseCounted, shiftDay, signedPrice } from "@/lib/caisse-jour";
 import { methodLabel } from "@/lib/caisse-texte";
 import type { CashClosing, CashDay, ClosingSummary, SaleSettings } from "@/lib/caisse-types";
-import { formatInstantTime, formatLongDate, formatPrice } from "@/lib/format";
+import { formatInstantTime, formatLongDate, formatPrice, modeSaisieMontant } from "@/lib/format";
 import { closingSource } from "@/lib/ticket-pdf";
 import { newRequestId } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,7 @@ function Resume({ summary }: { summary: ClosingSummary }) {
   );
 }
 
-/** Une clôture enregistrée : numéro, heure et personne, espèces attendues et comptées, écart, note, ticket imprimable. */
+/** Une clôture enregistrée : numéro, heure et personne, espèces attendues et comptées, écart, note, ticket imprimable (sur l'imprimante réseau si elle est réglée). */
 function CarteCloture({ closing }: { closing: CashClosing }) {
   const { t, lang } = useI18n();
   const ecart = useEcart();
@@ -115,7 +115,7 @@ function CarteCloture({ closing }: { closing: CashClosing }) {
         {/* Retouche P2 (critique du 1er octobre 2026) : préfixée de « Note : », à parité avec le ticket imprimé (ticket.note). */}
         {closing.note && <p className="break-words pt-1 text-muted-foreground">{t("caisse_jour.note_texte", { note: closing.note })}</p>}
       </dl>
-      <BoutonsTicket source={closingSource(closing)} />
+      <BoutonsTicket source={closingSource(closing)} direct={{ kind: "closing", id: closing.id }} />
     </article>
   );
 }
@@ -160,7 +160,7 @@ function FormulaireCloture({ report, onClose, onDone }: { report: CashDay; onClo
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="cloture-especes">{t("caisse_jour.especes_comptees")}</Label>
-        <Input id="cloture-especes" inputMode="numeric" className="chiffres-tabulaires h-14 text-right text-2xl" value={counted} onInput={(e: Event) => setCounted((e.currentTarget as HTMLInputElement).value)} />
+        <Input id="cloture-especes" inputMode={modeSaisieMontant()} className="chiffres-tabulaires h-14 text-right text-2xl" value={counted} onInput={(e: Event) => setCounted((e.currentTarget as HTMLInputElement).value)} />
         <p role="status" className={cn("text-sm", value === null ? "text-muted-foreground" : "font-medium")}>
           {value === null ? t("caisse_jour.saisir_especes") : ecart(expected, value)}
         </p>

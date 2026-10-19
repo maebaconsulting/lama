@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setupApp } from "../test-support.ts";
+import { prixDemo } from "../../shared/devises.ts";
 
 test("sans compte, l'API exige l'installation ; l'installation crée l'administrateur une seule fois", async (t) => {
   const ctx = await setupApp(t, { demo: false });
   const anon = ctx.anonymous();
-  assert.deepEqual((await anon("GET", "/api/auth/state")).body, { installed: false, account: null, device: null, session: null, marque: { ecran: "logo_nom", nom: "", logos: { clair: null, sombre: null } }, crm: null, formation: false, demo: null });
+  assert.deepEqual((await anon("GET", "/api/auth/state")).body, { installed: false, account: null, device: null, session: null, marque: { ecran: "logo_nom", nom: "", logos: { clair: null, sombre: null } }, devise: { code: "XAF", position: null, symboleEcran: true }, crm: null, formation: false, demo: null });
   const blocked = await anon("GET", "/api/stats");
   assert.equal(blocked.status, 409);
   assert.equal(blocked.body.code, "installation");
@@ -169,4 +170,29 @@ test("l'état de session indique le type et, pour un poste, le délai de verroui
   await manager("POST", "/api/auth/logout");
   assert.equal((await manager("POST", "/api/auth/pin", { account_id: grace.id, pin: "2580" })).status, 200);
   assert.deepEqual((await manager("GET", "/api/auth/state")).body.session, { kind: "poste", idle_ms: 5 * 60_000 });
+});
+
+test("installation en euros : devise enregistrée et appliquée ; code inconnu refusé sans créer de compte", async (t) => {
+  const ctx = await setupApp(t, { demo: false });
+  const anon = ctx.anonymous();
+  const bad = await anon("POST", "/api/auth/install", { display_name: "Admin", login: "admin", password: "mot-de-passe-1", language: "fr", devise: "ZZZ" });
+  assert.equal(bad.status, 400);
+  assert.equal((await anon("GET", "/api/auth/state")).body.installed, false);
+  const ok = await anon("POST", "/api/auth/install", { display_name: "Admin", login: "admin", password: "mot-de-passe-1", language: "fr", devise: "EUR" });
+  assert.equal(ok.status, 201);
+  assert.equal((await anon("GET", "/api/auth/state")).body.devise.code, "EUR");
+});
+
+test("démonstration installée en euros : fiches semées en XAF à la première requête, prix convertis à l'installation", async (t) => {
+  const ctx = await setupApp(t, { demo: true });
+  const anon = ctx.anonymous();
+  assert.equal((await anon("GET", "/api/auth/state")).body.installed, false);   // première requête : fiches semées en XAF
+  const ligne = (sql: string) => ({ ...(ctx.db.prepare(sql).get() as Record<string, number>) });
+  const service = ligne("SELECT id, price FROM services ORDER BY id LIMIT 1");
+  const produit = ligne("SELECT id, price, cost FROM products ORDER BY id LIMIT 1");
+  assert.equal(service.price, 25000, "soin du visage éclat : 25 000 F, prix de démonstration écrit en XAF (seed.ts:46)");
+  const ok = await anon("POST", "/api/auth/install", { display_name: "Admin", login: "admin", password: "mot-de-passe-1", language: "fr", devise: "EUR" });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.equal(ligne(`SELECT price FROM services WHERE id = ${service.id}`).price, prixDemo(service.price, "EUR"));
+  assert.deepEqual(ligne(`SELECT price, cost FROM products WHERE id = ${produit.id}`), { price: prixDemo(produit.price, "EUR"), cost: prixDemo(produit.cost, "EUR") });
 });

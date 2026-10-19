@@ -10,7 +10,7 @@ import jpeg from "jpeg-js";
 import { checkImageSize, IMAGE_MAX_SIDE, ImageTooLarge, jpegSize, type ImageType } from "../images.ts";
 
 export interface PrintImage { width: number; height: number; bits: Buffer }
-interface Rgba { width: number; height: number; rgba: Uint8Array }
+export interface Rgba { width: number; height: number; rgba: Uint8Array }
 
 /** Décode un logo en RGBA ; refuse, avant de décoder les pixels, une image de plus de 4 000 points de côté. */
 export function decodeImage(bytes: Buffer, type: ImageType): Rgba {

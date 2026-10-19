@@ -1,6 +1,8 @@
 import type { ComponentChildren } from "preact";
 import { MotLama, SigneLama } from "@/components/brand";
 import { BoutonDestructif, ChiffreCle, ElementListe, EtatChargement, EtatErreur, EtatVide, ListeComptoir } from "@/components/comptoir";
+import { deviseActive } from "../../shared/devise-active.ts";
+import { formatPrice } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +20,10 @@ const FONDATIONS = [
   { nom: "Filet", hex: "#D8D1C4", role: "lignes décoratives du registre" },
   { nom: "Encre rouge", hex: "#7A1F1F", role: "erreurs, suppressions, conflits, annulé" },
 ];
-const SPECIMEN = "Élégance, À bientôt, Ç, Œ, « Soin éclat », 15\u202f000\u00a0F";
+/** Calculé au rendu : la devise est posée après l'import du module. */
+function specimen(): string {
+  return "Élégance, À bientôt, Ç, Œ, « Soin éclat », " + formatPrice(15000, "fr");
+}
 
 function Section({ titre, children }: { titre: string; children: ComponentChildren }) {
   return (
@@ -107,13 +112,13 @@ export function Charte() {
             <div>
               <p className="etiquette mb-2 text-encre-grise">EB Garamond · titres, heures, montants</p>
               <p className="font-serif text-2xl">Planning du jour</p>
-              <p className="chiffres text-lg">{"09:30 · 14:00 · 15\u202f000\u00a0F"}</p>
-              <p className="font-serif text-base">{SPECIMEN}</p>
+              <p className="chiffres text-lg">{"09:30 · 14:00 · " + formatPrice(15000, "fr")}</p>
+              <p className="font-serif text-base">{specimen()}</p>
             </div>
             <div>
               <p className="etiquette mb-2 text-encre-grise">Jost · interface et données</p>
               <p className="etiquette">Institut de beauté</p>
-              <p className="text-base">{SPECIMEN}</p>
+              <p className="text-base">{specimen()}</p>
               <p className="text-sm text-encre-grise">{"Échelle\u00a0: 0,75 · 0,875 · 1 · 1,375 · 2\u00a0rem"}</p>
             </div>
           </div>
@@ -134,7 +139,7 @@ export function Charte() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <ChiffreCle valeur={12} libelle="Rendez-vous du jour" />
             <ChiffreCle valeur={4} libelle="À venir" onClick={() => undefined} />
-            <ChiffreCle valeur={"185\u202f000"} libelle="Prévu (F)" />
+            <ChiffreCle valeur={"185\u202f000"} libelle={`Prévu (${deviseActive().symbole})`} />
             <ChiffreCle valeur={2} libelle="Stock bas" alerte />
           </div>
           <div className="mt-6">
@@ -189,7 +194,7 @@ export function Charte() {
                 <TableHead>Heure</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Montant (F)</TableHead>
+                <TableHead className="text-right">{`Montant (${deviseActive().symbole})`}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -214,7 +219,7 @@ export function Charte() {
             <p className="pb-4 text-center font-serif text-base">Nom de l'institut</p>
             <p className="border-t border-dashed border-cuir pt-2 text-center">FAC-2026-000123 · 27/09/2026 15:40</p>
             <div className="flex justify-between py-2"><span>Soin du visage éclat</span><span className="chiffres">{"25\u202f000"}</span></div>
-            <div className="flex justify-between border-t border-dashed border-cuir pt-2 font-medium"><span>Total TTC</span><span className="chiffres">{"25\u202f000\u00a0F"}</span></div>
+            <div className="flex justify-between border-t border-dashed border-cuir pt-2 font-medium"><span>Total TTC</span><span className="chiffres">{formatPrice(25000, "fr")}</span></div>
             <p className="pt-3 text-center text-encre-grise">Merci de votre visite, à très bientôt.</p>
             <p className="pt-1 text-center text-[10px] text-encre-grise">propulsé par lama</p>
           </div>

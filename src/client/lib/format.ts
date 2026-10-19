@@ -1,9 +1,12 @@
 /**
- * Formats de l'institut (spec § 3.3) : francs CFA entiers, dates et heures de
+ * Formats de l'institut (spec § 3.3) : montants dans la devise de l'institut, dates et heures de
  * Douala, quelle que soit l'heure de l'appareil. Tout montant et toute date
  * affichés passent par ici. Sans dépendance au navigateur (testé sous Node).
  */
 import { LOCALES, type Lang } from "../i18n/translate.ts";
+import { formatMontantEcran, formatNombre, lireMontant, separateurDecimal } from "../../shared/montants.ts";
+import { deviseActive } from "../../shared/devise-active.ts";
+export { formatEntier, formatMontantDocument } from "../../shared/montants.ts";
 
 /** Fuseau de l'institut : UTC+1 toute l'année, sans heure d'été. */
 export const TIME_ZONE = "Africa/Douala";
@@ -11,14 +14,6 @@ export const TIME_ZONE = "Africa/Douala";
 export const EMPTY = "–";
 
 const formats = new Map<string, Intl.DateTimeFormat>();
-
-/**
- * Groupage des milliers, identique dans les deux langues (décision
- * produit du 30/09/2026, § 8) : le format français (espace fine
- * insécable) sert aussi à l'écran anglais, pour qu'une virgule ne ressemble
- * plus à des centimes.
- */
-const AMOUNT_FORMAT = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
 function dateFormat(lang: Lang, name: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   const id = `${lang}:${name}`;
@@ -30,15 +25,9 @@ function dateFormat(lang: Lang, name: string, options: Intl.DateTimeFormatOption
   return format;
 }
 
-/**
- * Nombre de francs sans la devise, groupé par milliers de la même façon dans
- * les deux langues : `15\u202f000` (pavé de la caisse, coupures, montants
- * rapides ; décision du 30/09/2026, § 8). Arrondi à l'entier. `lang` reste au
- * paramètre pour la cohérence des signatures de ce module, même s'il ne
- * change plus le groupage.
- */
+/** Nombre seul, dans la devise active (`15 000`, `15 000,50`). */
 export function formatAmount(amount: number | null | undefined, lang: Lang): string {
-  return AMOUNT_FORMAT.format(Math.round(Number(amount) || 0));
+  return formatNombre(Number(amount) || 0, lang);
 }
 
 const rates = new Map<Lang, Intl.NumberFormat>();
@@ -53,40 +42,24 @@ export function formatRate(rate: number, lang: Lang): string {
   return format.format(rate);
 }
 
-/**
- * Montant à l'écran, entier : `15\u202f000\u00a0F` dans les deux langues (décision
- * produit du 30/09/2026, § 8 : le FCFA n'a pas de centimes, gagner de la
- * place en n'écrivant que « F » à l'écran). Nombre puis « F », séparés par une
- * espace insécable. Un montant hérité à décimales est arrondi. Pour les
- * documents officiels (ticket PDF, avoir, reçu d'acompte), voir
- * `formatPriceDocument`.
- */
+/** Montant à l'écran : symbole de la devise à sa position, ou le nombre seul s'il est masqué. */
 export function formatPrice(amount: number | null | undefined, lang: Lang): string {
-  return `${formatAmount(amount, lang)}\u00a0F`;
+  return formatMontantEcran(Number(amount) || 0, lang);
 }
 
 /**
- * Montant en francs CFA, en toutes lettres : `15\u202f000\u00a0FCFA` dans les deux
- * langues, réservé aux documents officiels (ticket PDF, avoir, reçu
- * d'acompte, vague 2 ; décision du 30/09/2026, § 8). Ne pas utiliser à
- * l'écran : `formatPrice` suffit.
+ * Sépare un montant de `formatPrice` en trois morceaux à ne jamais couper :
+ * symbole avant, nombre, symbole après (l'un des deux vide) ; `null` si le
+ * texte n'a pas cette forme. Seule l'espace insécable entre symbole et nombre
+ * peut devenir un retour à la ligne.
  */
-export function formatPriceDocument(amount: number | null | undefined, lang: Lang): string {
-  return `${formatAmount(amount, lang)}\u00a0FCFA`;
-}
-
-/**
- * Sépare un montant déjà formaté (`formatPrice`) en deux morceaux à ne jamais
- * couper à l'affichage : le nombre (ses groupes de milliers restent liés par
- * l'espace fine insécable) et « F ». `null` si le texte n'a pas cette forme
- * (une valeur qui n'est pas un montant).
- * Relecture finale, constat 1 bis : `break-words` coupait « FCFA » au milieu
- * (« FC »/« FA ») ; seule l'espace insécable entre le nombre et la devise (pas
- * les espaces fines des milliers, jamais touchées ici) doit pouvoir devenir un
- * retour à la ligne.
- */
-export function splitAmount(text: string): [string, string] | null {
-  if (text.endsWith("\u00a0F")) return [text.slice(0, -2), "F"];
+export function splitAmount(text: string): { avant: string; nombre: string; apres: string } | null {
+  const s = deviseActive().symbole;
+  // Signe ASCII (`formatPrice`) ou typographique (`signedPrice` de `caisse-jour.ts` : « −9 750 F »).
+  const signe = text.startsWith("-") || text.startsWith("\u2212") ? text[0] : "";
+  const corps = signe ? text.slice(1) : text;
+  if (corps.endsWith(`\u00a0${s}`)) return { avant: "", nombre: `${signe}${corps.slice(0, -(s.length + 1))}`, apres: s };
+  if (corps.startsWith(`${s}\u00a0`)) return { avant: `${signe}${s}`, nombre: corps.slice(s.length + 1), apres: "" };
   return null;
 }
 
@@ -102,42 +75,31 @@ export function amountFontSize(value: string | number): string {
   return `clamp(1rem, calc(100cqi / ${em}), 1.5rem)`;
 }
 
-/**
- * Prix saisi : entier de francs, jamais négatif ni `NaN`. Un point, une
- * virgule ou une espace (ordinaire, U+00A0 ou U+202F) suivi d'exactement
- * trois chiffres est un séparateur de milliers ("15.000", "15,000",
- * "1.500.000", "15 000") ; tout autre point ou virgule est une décimale,
- * arrondie au franc entier (relecture finale I1).
- */
 export function parseAmount(text: string): number {
   return readAmount(text) ?? 0;
 }
 
-/**
- * Comme `parseAmount`, mais `null` quand la saisie n'est pas un nombre de
- * francs (« abc », « 3 5OO francs », « douze mille », « -20 ») : un formulaire
- * la refuse au lieu d'enregistrer 0 F (décision 8, V1-12). Vide vaut 0.
- */
 export function readAmount(text: string): number | null {
-  let cleaned = "";
-  // L'unité recopiée après le nombre (« 15 000 F », « 15 000 FCFA », « 3 500 francs ») est tolérée.
-  const t = text.trim().replace(/(\d)\s*(f|fcfa|cfa|francs?)$/i, "$1");
-  for (let i = 0; i < t.length; i++) {
-    const ch = t[i];
-    if (/[.,\s]/.test(ch)) {
-      let j = i + 1;
-      while (j < t.length && /\d/.test(t[j])) j++;
-      const groupLength = j - i - 1;
-      if (!/\s/.test(ch) && groupLength !== 3) cleaned += ".";
-      // sinon (espace, ou point/virgule suivi de trois chiffres) : séparateur de milliers, ignoré.
-    } else {
-      cleaned += ch;
-    }
-  }
-  if (cleaned === "") return 0;
-  // Chiffres et une décimale au plus : ni signe, ni lettre, ni « 1e3 » ou « 0x10 ».
-  if (!/^(\d+\.?\d*|\.\d+)$/.test(cleaned)) return null;
-  return Math.round(Number(cleaned));
+  return lireMontant(text);
+}
+
+/**
+ * Texte prérempli d'un champ de montant (fiche de prestation ou de produit,
+ * remise, pourboire, rubrique Fidélité), relu par `parseAmount` : jamais de
+ * séparateur de milliers ; « 15000 » pour une devise sans centimes, comme
+ * avant ; « 15,50 » (« 15.50 » en anglais) pour une devise à centimes.
+ */
+export function texteSaisie(mineur: number, lang: Lang): string {
+  const d = deviseActive();
+  const n = Math.max(Math.round(Number(mineur) || 0), 0);
+  if (d.decimales === 0) return String(n);
+  const k = 10 ** d.decimales;
+  return `${Math.floor(n / k)}${separateurDecimal(lang)}${String(n % k).padStart(d.decimales, "0")}`;
+}
+
+/** Clavier d'un champ de montant au téléphone et à la tablette : avec séparateur décimal pour une devise à centimes. */
+export function modeSaisieMontant(): "decimal" | "numeric" {
+  return deviseActive().decimales > 0 ? "decimal" : "numeric";
 }
 
 /** Date de calendrier `YYYY-MM-DD` ancrée à midi UTC : elle ne change jamais de jour. */

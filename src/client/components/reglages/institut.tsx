@@ -14,6 +14,7 @@ import { useConfirmation } from "../auth/confirmation";
 import { Rubrique, SELECT } from "./elements";
 import { EtatChargement, EtatErreur } from "../comptoir";
 import { LogosInstitut } from "./logos-institut";
+import { HorairesInstitut } from "./horaires-institut";
 
 const KEYS = ["institut.nom", "institut.adresse", "institut.telephone", "institut.langue", "marque.ecran", "marque.documents"] as const;
 
@@ -111,6 +112,7 @@ export function Institut() {
         <Succes message={ok} />
         <div><Button type="submit" disabled={pending || changedKeys(baseline, form).length === 0}>{t("commun.enregistrer")}</Button></div>
       </form>
+      <div className="max-w-2xl"><HorairesInstitut /></div>
       <div className="max-w-2xl"><LogosInstitut /></div>
     </Rubrique>
   );

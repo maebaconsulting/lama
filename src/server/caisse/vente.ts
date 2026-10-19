@@ -9,11 +9,13 @@
  * annule tout.
  */
 import type { Database } from "../storage.ts";
-import { coded, MessageError, type MessageKey, type Values } from "../messages.ts";
+import { coded, MessageError, montant, type MessageKey, type Values } from "../messages.ts";
 import {
-  DISCOUNT_REASONS, PAYMENT_METHODS, REFERENCE_REQUIRED, documentNumber, exceedsCap, formatFrancs, saleTotals, wholeFrancs, yearAt,
+  DISCOUNT_REASONS, PAYMENT_METHODS, REFERENCE_REQUIRED, documentNumber, exceedsCap, saleTotals, yearAt,
   type DiscountKind, type DiscountReason, type PaymentMethod, type SettledPayment, type Totals,
 } from "../../shared/caisse.ts";
+import { entierMineur } from "../../shared/montants.ts";
+import { libreProblem } from "../../shared/supplements.ts";
 import { applyDeposit, counterDeposit, heldDeposit } from "./acompte.ts";
 import { invoicePrefixForIssue } from "./prefixe.ts";
 import { loyaltyBalance, recordSaleLoyalty, type LoyaltySettings } from "../crm/fidelite.ts";
@@ -44,10 +46,17 @@ export interface SaleSettings {
 }
 
 export interface SaleLineRequest {
-  kind: "service" | "product";
-  ref_id: number;
+  kind: "service" | "product" | "libre";
+  /** Article du catalogue ; `null` pour un supplément libre. */
+  ref_id: number | null;
   quantity: number;
+  /** Praticienne d'une prestation (celle du rendez-vous par défaut) ; un supplément prend celle de sa prestation. */
   staff_id: number | null;
+  /** Supplément (spec du 18/10/2026 § 3.4) : indice, dans `lines`, de la prestation à laquelle il est rattaché ; `null` pour une ligne seule. */
+  parent: number | null;
+  /** Supplément libre : libellé et prix saisis, contrôlés par `parseSaleRequest` ; absents pour un article du catalogue. */
+  label?: string;
+  unit_price?: number;
 }
 
 export interface SaleRequest {
@@ -104,12 +113,32 @@ export function parseSaleRequest(input: unknown): SaleRequest {
   if (appointment_id === undefined) throw invalid("vente.rdv_inconnu");
   if (!Array.isArray(body.lines) || body.lines.length === 0) throw invalid("vente.lignes");
   if (body.lines.length > 100) throw invalid("vente.ligne_invalide");
-  const lines = body.lines.map((raw): SaleLineRequest => {
+  const lines = body.lines.map((raw, index): SaleLineRequest => {
     const l = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const staff = optionalId(l.staff_id);
-    if ((l.kind !== "service" && l.kind !== "product") || !isId(l.ref_id) || !isCount(l.quantity) || staff === undefined) throw invalid("vente.ligne_invalide");
-    return { kind: l.kind, ref_id: l.ref_id, quantity: l.quantity, staff_id: l.kind === "service" ? staff : null };
+    // Supplément (spec § 3.4) : `parent` désigne une ligne plus haut du ticket, jamais une ligne qui suit.
+    const parent = l.parent === undefined || l.parent === null ? null
+      : Number.isInteger(l.parent) && (l.parent as number) >= 0 && (l.parent as number) < index ? (l.parent as number) : undefined;
+    if (parent === undefined || staff === undefined || !isCount(l.quantity)) throw invalid("vente.ligne_invalide");
+    if (l.kind === "libre") {
+      if (parent === null) throw invalid("vente.supplement_parent");
+      const problem = libreProblem({ label: l.label, price: l.unit_price, minutes: 0 });
+      if (problem) throw invalid(problem);
+      if (l.quantity !== 1) throw invalid("vente.ligne_invalide");
+      return { kind: "libre", ref_id: null, quantity: 1, staff_id: null, parent, label: (l.label as string).trim(), unit_price: l.unit_price as number };
+    }
+    if ((l.kind !== "service" && l.kind !== "product") || !isId(l.ref_id)) throw invalid("vente.ligne_invalide");
+    // Une prestation en supplément compte une fois.
+    if (parent !== null && l.kind === "service" && l.quantity !== 1) throw invalid("vente.ligne_invalide");
+    return { kind: l.kind, ref_id: l.ref_id, quantity: l.quantity, staff_id: l.kind === "service" && parent === null ? staff : null, parent };
   });
+  // Un supplément suit une prestation seule (jamais un produit ni un autre supplément) et prend sa praticienne.
+  for (const line of lines) {
+    if (line.parent === null) continue;
+    const parent = lines[line.parent];
+    if (parent.kind !== "service" || parent.parent !== null) throw invalid("vente.supplement_parent");
+    line.staff_id = parent.staff_id;
+  }
   const deposit_id = optionalId(body.deposit_id);
   if (deposit_id === undefined) throw invalid("acompte.introuvable");
   // V1-78 : un rendez-vous déduit son propre acompte ; au comptoir, seulement une vente de produits.
@@ -162,12 +191,37 @@ const one = (db: Database, sql: string, ...params: (string | number | null)[]) =
  */
 export function priceSale(db: Database, req: SaleRequest, settings: SaleSettings): PricedSale {
   const lines = req.lines.map((line): PricedLine => {
+    // Supplément libre : libellé et prix saisis, seuls montants que le serveur reçoit de l'appareil (spec § 3.4).
+    if (line.kind === "libre") {
+      const unit = line.unit_price ?? 0;
+      return { ...line, label_fr: line.label ?? "", label_en: "", unit_price: unit, line_total: unit * line.quantity };
+    }
     const row = line.kind === "service"
-      ? one(db, "SELECT name, name_en, price FROM services WHERE id = ?", line.ref_id)
+      ? one(db, "SELECT name, name_en, price, supplement_seulement FROM services WHERE id = ?", line.ref_id)
       : one(db, "SELECT name, name_en, price FROM products WHERE id = ?", line.ref_id);
-    if (!row) throw invalid(line.kind === "service" ? "vente.prestation_inconnue" : "vente.produit_inconnu", { id: line.ref_id });
+    if (!row) throw invalid(line.kind === "service" ? "vente.prestation_inconnue" : "vente.produit_inconnu", { id: line.ref_id ?? 0 });
+    // « Supplément seulement » : jamais vendue seule (spec § 3.1), sauf depuis un rendez-vous pris
+    // avant le changement de la case, qui la porte comme prestation et doit rester encaissable (rendez-vous de la même cliente).
+    if (line.kind === "service" && line.parent === null && Number(row.supplement_seulement) === 1) {
+      const portee = req.appointment_id !== null && one(db,
+        `SELECT 1 AS x FROM appointment_services aps JOIN appointments a ON a.id = aps.appointment_id
+          WHERE aps.appointment_id = ? AND aps.service_id = ? AND a.client_id IS ?`, req.appointment_id, line.ref_id, req.client_id);
+      if (!portee) throw invalid("vente.supplement_seul", { nom: String(row.name) });
+    }
+    // Prestation en supplément : mêmes refus qu'à la prise de rendez-vous (jamais elle-même, jamais en cascade),
+    // sauf pour un supplément déjà porté par le rendez-vous, pris avant que la prestation reçoive sa liste.
+    if (line.kind === "service" && line.parent !== null) {
+      if (line.ref_id === req.lines[line.parent].ref_id) throw invalid("supplement.lui_meme");
+      const portee = req.appointment_id !== null && one(db,
+        `SELECT 1 AS x FROM appointment_supplements s JOIN appointment_services aps ON aps.id = s.appointment_service_id
+          JOIN appointments a ON a.id = aps.appointment_id
+          WHERE aps.appointment_id = ? AND s.kind = 'service' AND s.ref_id = ? AND a.client_id IS ?`, req.appointment_id, line.ref_id, req.client_id);
+      if (!portee && one(db, "SELECT 1 AS x FROM service_supplements WHERE service_id = ?", line.ref_id)) {
+        throw invalid("supplement.a_une_liste", { nom: String(row.name) });
+      }
+    }
     if (line.staff_id !== null && !one(db, "SELECT id FROM staff WHERE id = ?", line.staff_id)) throw invalid("vente.membre_inconnu", { id: line.staff_id });
-    const unit = wholeFrancs(row.price as number);
+    const unit = entierMineur(row.price as number);
     return { ...line, label_fr: String(row.name ?? ""), label_en: String(row.name_en ?? ""), unit_price: unit, line_total: unit * line.quantity };
   });
   if (req.client_id !== null && !one(db, "SELECT id FROM clients WHERE id = ?", req.client_id)) throw invalid("vente.cliente_inconnue");
@@ -222,7 +276,7 @@ export function checkPayments(payments: SaleRequest["payments"], due: number, se
   const received = settled.reduce((sum, p) => sum + p.amount, 0);
   // Mineur 3 (relecture finale) : montants du message groupés comme à l'écran ; `extra.due` reste un
   // nombre, lu par l'écran pour afficher tout de suite le vrai montant à payer (mineur 2).
-  if (received !== due) throw new SaleError(409, "vente.versements_total", { recu: formatFrancs(received), du: formatFrancs(due) }, { code: "total", due });
+  if (received !== due) throw new SaleError(409, "vente.versements_total", { recu: montant(received), du: montant(due) }, { code: "total", due });
   return settled;
 }
 
@@ -288,6 +342,19 @@ export function checkPractitioner(db: Database, req: SaleRequest, staffId: numbe
   if (apt.status !== "in_progress" && apt.status !== "completed") throw new SaleError(403, "vente.praticienne_statut");
   if (req.client_id !== ((apt.client_id as number | null) ?? null)) throw new SaleError(403, "vente.praticienne_cliente");
   if (one(db, "SELECT 1 AS x FROM deposits WHERE appointment_id = ? AND status = 'held'", req.appointment_id)) throw new SaleError(403, "vente.praticienne_acompte");
+  // Supplément libre (spec § 3.4) : la praticienne n'encaisse que ceux de son rendez-vous, même libellé et même prix.
+  const libres = req.lines.filter((l) => l.kind === "libre");
+  if (libres.length > 0) {
+    const permis = (db.prepare(
+      `SELECT s.label_fr, s.price FROM appointment_supplements s JOIN appointment_services aps ON aps.id = s.appointment_service_id
+        WHERE aps.appointment_id = ? AND s.kind = 'libre'`,
+    ).all(req.appointment_id) as Row[]).map((s) => `${String(s.label_fr)}\n${Number(s.price)}`);
+    for (const l of libres) {
+      const at = permis.indexOf(`${l.label}\n${l.unit_price}`);
+      if (at < 0) throw new SaleError(403, "vente.praticienne_libre");
+      permis.splice(at, 1);
+    }
+  }
 }
 
 /**
@@ -331,7 +398,7 @@ export function issueSale(db: Database, req: SaleRequest, ctx: IssueContext): { 
   // Correctif 1 (relecture) : l'acompte se compare au total TTC seul, jamais au pourboire (décision 5) :
   // sinon un acompte plus gros que le total pourrait payer une part du pourboire.
   if (deposit && deposit.amount > priced.totals.total_ttc) {
-    throw new SaleError(409, counter ? "acompte.depasse_comptoir" : "acompte.depasse", { numero: deposit.number, acompte: formatFrancs(deposit.amount), du: formatFrancs(priced.totals.total_ttc) }, { code: "acompte" });
+    throw new SaleError(409, counter ? "acompte.depasse_comptoir" : "acompte.depasse", { numero: deposit.number, acompte: montant(deposit.amount), du: montant(priced.totals.total_ttc) }, { code: "acompte" });
   }
   const payments = checkPayments(req.payments, priced.totals.due - (deposit?.amount ?? 0), ctx.settings);
   if (req.appointment_id !== null) {
@@ -358,11 +425,15 @@ export function issueSale(db: Database, req: SaleRequest, ctx: IssueContext): { 
   const id = Number(invoice.lastInsertRowid);
 
   const addLine = db.prepare(
-    "INSERT INTO invoice_lines (invoice_id, kind, ref_id, label_fr, label_en, quantity, unit_price, line_total, staff_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO invoice_lines (invoice_id, kind, ref_id, label_fr, label_en, quantity, unit_price, line_total, staff_id, parent_line_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const takeStock = db.prepare("UPDATE products SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND stock >= ?");
+  // Identifiant de chaque ligne écrite, dans l'ordre du ticket : un supplément pointe vers celle de sa prestation.
+  const lineIds: number[] = [];
   for (const line of priced.lines) {
-    addLine.run(id, line.kind, line.ref_id, line.label_fr, line.label_en, line.quantity, line.unit_price, line.line_total, line.staff_id);
+    const parentId = line.parent === null ? null : lineIds[line.parent];
+    const written = addLine.run(id, line.kind, line.ref_id, line.label_fr, line.label_en, line.quantity, line.unit_price, line.line_total, line.staff_id, parentId);
+    lineIds.push(Number(written.lastInsertRowid));
     if (line.kind === "product" && Number(takeStock.run(line.quantity, line.ref_id, line.quantity).changes) === 0) {
       // Mineur 4 (relecture finale) : désignation anglaise pour une demande en anglais, si le produit en a une.
       const produit = ctx.requestLang === "en" && line.label_en ? line.label_en : line.label_fr;

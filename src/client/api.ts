@@ -49,8 +49,8 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   }
 }
 
-/** Dépose un fichier (le logo de l'institut) en corps binaire ; mêmes erreurs et mêmes signaux de session que `api`. */
-export async function apiUpload<T>(method: "PUT", path: string, file: Blob): Promise<T> {
+/** Dépose un fichier (logo de l'institut, photo d'un produit, fichier d'import) en corps binaire ; mêmes erreurs et mêmes signaux de session que `api`. */
+export async function apiUpload<T>(method: "PUT" | "POST", path: string, file: Blob): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, uploadInit(method, file, lang));

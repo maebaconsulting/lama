@@ -24,6 +24,7 @@ const VIEW_SLUGS: Record<View, Record<Lang, string>> = {
   charte: { fr: "charte", en: "charte" },
   vente: { fr: "vente", en: "sale" },
   caisse: { fr: "caisse", en: "till" },
+  demandes: { fr: "demandes-en-ligne", en: "online-requests" },
 };
 
 const SECTION_SLUGS: Record<SectionId, Record<Lang, string>> = {
@@ -31,6 +32,8 @@ const SECTION_SLUGS: Record<SectionId, Record<Lang, string>> = {
   caisse: { fr: "caisse", en: "checkout" },
   fidelite: { fr: "fidelite", en: "loyalty" },
   whatsapp: { fr: "messages", en: "messages" },
+  "en-ligne": { fr: "reservation-en-ligne", en: "online-appointments" },
+  import: { fr: "import", en: "import" },
   comptes: { fr: "comptes", en: "accounts" },
   postes: { fr: "postes", en: "devices" },
   "a-envoyer": { fr: "a-envoyer", en: "to-send" },

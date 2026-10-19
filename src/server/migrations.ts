@@ -17,6 +17,12 @@ import fidelite from "./migrations/015_fidelite.ts";
 import carte from "./migrations/016_carte.ts";
 import acompteComptoir from "./migrations/017_acompte_comptoir.ts";
 import prefixeFactures from "./migrations/018_prefixe_factures.ts";
+import devise from "./migrations/019_devise.ts";
+import horaires from "./migrations/020_horaires.ts";
+import enLigne from "./migrations/021_en_ligne.ts";
+import curseurRef from "./migrations/022_curseur_ref.ts";
+import prenomEnLigne from "./migrations/023_prenom_en_ligne.ts";
+import supplements from "./migrations/024_supplements.ts";
 
 export const MIGRATIONS: { id: string; sql: string }[] = [
   { id: "001_base", sql: base },
@@ -37,6 +43,12 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
   { id: "016_carte", sql: carte },
   { id: "017_acompte_comptoir", sql: acompteComptoir },
   { id: "018_prefixe_factures", sql: prefixeFactures },
+  { id: "019_devise", sql: devise },
+  { id: "020_horaires", sql: horaires },
+  { id: "021_en_ligne", sql: enLigne },
+  { id: "022_curseur_ref", sql: curseurRef },
+  { id: "023_prenom_en_ligne", sql: prenomEnLigne },
+  { id: "024_supplements", sql: supplements },
 ];
 
 /**

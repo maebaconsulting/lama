@@ -2,6 +2,7 @@
 import type { Lang } from "../i18n/translate.ts";
 import type { AffichageMarque } from "./marque.ts";
 import type { ThemePref } from "./theme.ts";
+import type { ConfigDevise } from "../../shared/devise-active.ts";
 
 export type Role = "admin" | "manager" | "reception" | "practitioner";
 
@@ -32,6 +33,8 @@ export interface AuthState {
   session: SessionInfo | null;
   /** Réglages publics de la marque : affichage à l'écran (`logo_nom` ou `logo`), nom de l'institut, versions des logos (`null` sans logo). */
   marque: { ecran: AffichageMarque; nom: string; logos: { clair: number | null; sombre: number | null } };
+  /** Devise de l'institut (spec du 15/10/2026) : code, position du symbole, symbole à l'écran. */
+  devise: ConfigDevise;
   /** Interrupteur général du mini CRM (`crm.active`), pour tous les rôles ; `null` avant la connexion. */
   crm?: { active: boolean } | null;
   /** Base de formation (distribution D-18) : bandeau sur chaque écran, rubrique Réglages > Formation. */

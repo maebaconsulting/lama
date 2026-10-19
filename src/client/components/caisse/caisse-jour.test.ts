@@ -37,8 +37,8 @@ test("clôture : identifiant tiré une fois, espèces comptées lues par parseCo
   assert.match(ecran, /className="h-16 w-full text-base" onClick=\{\(\) => setClosing\(true\)\}>\{t\("caisse_jour\.cloturer"\)\}/, "bouton de 64 px");
 });
 
-test("clôtures enregistrées avec leur ticket, « Après clôture », documents ouverts dans le panneau", () => {
-  assert.match(ecran, /<BoutonsTicket source=\{closingSource\(closing\)\} \/>/);
+test("clôtures enregistrées avec leur ticket, imprimable sur l'imprimante réseau, « Après clôture », documents ouverts dans le panneau", () => {
+  assert.match(ecran, /<BoutonsTicket source=\{closingSource\(closing\)\} direct=\{\{ kind: "closing", id: closing\.id \}\} \/>/);
   assert.match(ecran, /t\(closed \? "caisse_jour\.apres_cloture" : "caisse_jour\.encaisse"\)/);
   assert.match(ecran, /onClick=\{\(\) => openPanel\("invoice", d\.id\)\}/);
   assert.match(ecran, /\{movedMethods\(summary\)\.map\(\(m\) => \(/);

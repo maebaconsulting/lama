@@ -47,7 +47,7 @@ test("D7 : SELECT (reglages/elements.tsx) fait 44 px de haut et 16 px sur télé
 
 test("nouveau rendez-vous : prestations en liste par catégorie, nom à gauche, durée et prix à droite (revue impeccable G4)", () => {
   const form = read("./create-appointment.tsx");
-  assert.match(form, /\{byCategory\(services, lang\)\.map\(\(group\) =>/);
+  assert.match(form, /\{byCategory\(sellableAlone\(services\), lang\)\.map\(\(group\) =>/);
   assert.match(form, /<legend className="etiquette mb-1\.5 text-encre-grise">\{t\("menu\.prestations"\)\}<\/legend>/);
   assert.match(form, /aria-pressed=\{on\}/);
   assert.match(form, /className="chiffres-tabulaires shrink-0 text-right text-muted-foreground"/);

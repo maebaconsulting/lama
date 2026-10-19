@@ -29,6 +29,22 @@ test("paire : texte de droite aussi large que la ligne, seul sur sa ligne et tro
   assert.deepEqual(pairLines("Total", "0123456789ABCDEFGHIJKL", 20), ["Total", "0123456789ABCDEFGHIJ"]);
 });
 
+test("supplément en retrait : retrait gardé sur la première ligne et les continuations, 48 colonnes au plus, quantité en retrait", () => {
+  const nb = "\u00a0";
+  const prefix = `${nb}${nb}+${nb}`;
+  const court = pairLines(toCp858Text(`${prefix}Mèches`), toCp858Text(`5${nb}000${nb}FCFA`), COLUMNS);
+  assert.equal(court.length, 1);
+  assert.ok(court[0].startsWith("  + Mèches"));
+  assert.equal(court[0].length, COLUMNS);
+  assert.ok(court[0].endsWith(" 5 000 FCFA"));
+  const long = pairLines(toCp858Text(`${prefix}Extensions colorées avec perles dorées et fils de soie torsadés main`), toCp858Text(`12${nb}000${nb}FCFA`), COLUMNS);
+  assert.ok(long.length > 1);
+  for (const l of long) assert.ok([...l].length <= COLUMNS, l);
+  for (const l of long.slice(1)) assert.ok(l.startsWith("  ") && !l.startsWith("   "), `continuation en retrait : ${l}`);
+  assert.ok(long[0].startsWith("  + Extensions"));
+  assert.deepEqual(wrap(toCp858Text(`${prefix}2${nb}×${nb}500${nb}FCFA`), COLUMNS), ["  + 2 × 500 FCFA"]);
+});
+
 const ROWS: TicketRow[] = [
   { type: "text", text: "Institut Akwa", style: "nom", align: "center" },
   { type: "rule" },

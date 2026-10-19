@@ -48,7 +48,7 @@ test("prix ou coût illisible : refusé par une clé traduite, jamais enregistr�
   assert.equal(amountProblem("15 000", "prix"), null);
   assert.equal(amountProblem("15.000", "cout"), null);
   for (const key of ["formulaire.prix_illisible", "formulaire.cout_illisible"] as const) {
-    assert.match(translate("fr", key), /illisible\u00a0: saisissez un nombre de francs en chiffres/);
-    assert.match(translate("en", key), /cannot be read/);
+    assert.match(translate("fr", key), /illisible\u00a0: saisissez un montant en chiffres/);
+    assert.match(translate("en", key), /is unreadable: enter an amount in figures/);
   }
 });

@@ -13,7 +13,7 @@ export const ROLE_KEYS: Record<Role, Key> = {
   practitioner: "role.practitioner",
 };
 
-export type SectionId = "institut" | "caisse" | "fidelite" | "whatsapp" | "comptes" | "postes" | "a-envoyer" | "file-envoi" | "sauvegardes" | "heure" | "formation" | "connexions" | "journal" | "mon-compte";
+export type SectionId = "institut" | "caisse" | "fidelite" | "whatsapp" | "en-ligne" | "import" | "comptes" | "postes" | "a-envoyer" | "file-envoi" | "sauvegardes" | "heure" | "formation" | "connexions" | "journal" | "mon-compte";
 
 const EVERYONE: Role[] = ["admin", "manager", "reception", "practitioner"];
 
@@ -29,6 +29,10 @@ export const SECTIONS: { id: SectionId; labelKey: Key; roles: Role[]; formation?
   { id: "fidelite", labelKey: "reglages.rubrique.fidelite", roles: ["manager"] },
   // WhatsApp (sous-projet 7) : session, textes et heures d'envoi à la gérante ; le fournisseur dans « Connexions » (administrateur).
   { id: "whatsapp", labelKey: "reglages.rubrique.whatsapp", roles: ["manager"] },
+  // Réservation en ligne (spec du 16/10/2026 § 4.6) : réglages, thème et partage à la gérante ; salon et clé à l'administrateur.
+  { id: "en-ligne", labelKey: "reglages.rubrique.en_ligne", roles: ["manager", "admin"] },
+  // Import de données (spec du 18/10/2026 § 2.1) : modèles, aperçu et import à la gérante et à l'administrateur.
+  { id: "import", labelKey: "reglages.rubrique.import", roles: ["manager", "admin"] },
   { id: "comptes", labelKey: "reglages.rubrique.comptes", roles: ["manager", "admin"] },
   { id: "postes", labelKey: "reglages.rubrique.postes", roles: ["manager", "admin"] },
   { id: "a-envoyer", labelKey: "reglages.rubrique.a_envoyer", roles: ["reception", "manager"] },
@@ -109,6 +113,8 @@ export function canChargeAppointment(account: { role: Role; staff_id: number | n
  */
 export function mayOpen(role: Role, view: string, id: string | null = null): boolean {
   if (view === "vente") return canSell(role) || (role === "practitioner" && id !== null);
+  // « Demandes en ligne » (réservation en ligne, spec § 4.5) : hors du menu, ouvert depuis l'accueil et l'agenda.
+  if (view === "demandes") return canSeeDemandes(role);
   return view === "charte" || (menuFor(role) as string[]).includes(view);
 }
 
@@ -144,6 +150,8 @@ export function appointmentCommands(role: Role): AppointmentCommands {
 export const canSeeBackupStatus = (role: Role) => role === "admin" || role === "manager";
 /** « À envoyer à la main », pastille et message libre : réception et gérante, jamais l'administrateur (le texte des messages). */
 export const canSeeManual = (role: Role) => role === "manager" || role === "reception";
+/** Demandes en ligne : réception et gérante, comme le serveur. */
+export const canSeeDemandes = (role: Role) => role === "manager" || role === "reception";
 /** Démarrer ou délier la session WhatsApp, voir le QR code : administrateur et gérante. */
 export const canLinkWhatsapp = (role: Role) => role === "admin" || role === "manager";
 

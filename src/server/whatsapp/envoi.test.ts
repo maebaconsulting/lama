@@ -132,6 +132,19 @@ test("fenêtre de silence : confirmation et rappel attendent ; le message libre 
   assert.deepEqual(fake.sent.map((s) => s.text), ["Libre"], "message libre : geste volontaire, sans accord ni silence");
 });
 
+test("réservation en ligne : silence revérifié à chaque essai (panne à 20:55, nouvel essai à 21:05)", async () => {
+  const { fake } = setup();
+  const avant = Date.parse("2026-10-01T19:55:00Z"); // 20:55 à Douala
+  const apres = Date.parse("2026-10-01T20:05:00Z"); // 21:05 à Douala
+  await put(message({ origin: { type: "en_ligne", demandeId: 1 } }), "e", avant);
+  // Inscrit hors du silence ; l'essai n'a lieu qu'à 21:05 (panne, repli) : le silence est revérifié.
+  await processDue(apres, true);
+  const item = await only();
+  assert.equal(item.status, "pending");
+  assert.equal(decode("fr", item.last_error), "Fenêtre sans envoi\u00a0: le message partira à la fin.");
+  assert.equal(fake.sent.length, 0);
+});
+
 test("débit : 4 s plus un tirage de 0 à 4 s entre deux envois", () => {
   const pacer = createPacer({ random: () => 0.5 });
   assert.equal(pacer.ready(0), true);

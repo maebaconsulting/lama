@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addRefund, canCredit, completesInvoice, creditBlocker, creditBody, creditPreview, refundsOf, remainingOf, removeRefund, setQuantity, setReason, setRefund, setRestock, startCredit, takeAll,
+  addRefund, canCredit, completesInvoice, creditBlocker, creditBody, creditPreview, draftRows, refundsOf, remainingOf, removeRefund, setQuantity, setReason, setRefund, setRestock, startCredit, supplementsLeft, takeAll, takeSupplements,
 } from "./avoir.ts";
 import type { Invoice } from "./caisse-types.ts";
 
@@ -133,4 +133,43 @@ test("completesInvoice : vrai seulement quand chaque ligne est reprise à son re
   assert.equal(completesInvoice(inv, takeAll(inv, startCredit(inv, "a-0123456789"))), true);
   const already = invoice({ lines: invoice().lines.map((l) => (l.id === 11 ? { ...l, credited: 1 } : l)) });
   assert.equal(completesInvoice(already, takeAll(already, startCredit(already, "a-0123456789"))), true, "déjà repris ailleurs, compté comme le serveur (credited + pris)");
+});
+
+/** Facture avec suppléments : Tresses (11), puis Crème (12), puis Mèches et deux Perles rattachées à Tresses. */
+function avecSupplements(): Invoice {
+  const base = invoice();
+  return invoice({
+    lines: [
+      { ...base.lines[0], id: 11, label_fr: "Tresses", parent_line_id: null },
+      { ...base.lines[1], id: 12, parent_line_id: null },
+      { ...base.lines[0], id: 13, label_fr: "Mèches", unit_price: 5000, line_total: 5000, parent_line_id: 11 },
+      { ...base.lines[1], id: 14, label_fr: "Perles", quantity: 2, unit_price: 500, line_total: 1000, parent_line_id: 11 },
+    ],
+  });
+}
+
+test("avoir avec suppléments : chaque supplément sous sa prestation ; « Reprendre aussi ses suppléments » les met à leur reste", () => {
+  const inv = avecSupplements();
+  let draft = startCredit(inv, "a-essai-supp");
+  assert.deepEqual(draftRows(inv, draft).map((r) => [r.line.id, r.supplement]), [[11, false], [13, true], [14, true], [12, false]]);
+  draft = setQuantity(inv, draft, 11, 1);
+  assert.equal(supplementsLeft(inv, draft, 11), true);
+  draft = takeSupplements(inv, draft, 11);
+  assert.deepEqual(draft.lines.map((d) => [d.line_id, d.quantity]), [[11, 1], [12, 0], [13, 1], [14, 2]]);
+  assert.equal(supplementsLeft(inv, draft, 11), false);
+  assert.equal(supplementsLeft(inv, draft, 12), false, "un produit seul n'a pas de suppléments");
+});
+
+test("takeSupplements : un supplément déjà en partie repris monte à son reste sans le dépasser", () => {
+  const base = avecSupplements();
+  const inv = { ...base, lines: base.lines.map((l) => (l.id === 14 ? { ...l, credited: 1 } : l)) };
+  const draft = takeSupplements(inv, startCredit(inv, "a-essai-reste"), 11);
+  assert.deepEqual(draft.lines.map((d) => [d.line_id, d.quantity]), [[11, 0], [12, 0], [13, 1], [14, 1]]);
+});
+
+test("draftRows : un supplément repris seul (prestation déjà reprise) n'est pas mis en retrait", () => {
+  const base = avecSupplements();
+  const inv = { ...base, lines: base.lines.map((l) => (l.id === 11 ? { ...l, credited: 1 } : l)) };
+  const rows = draftRows(inv, startCredit(inv, "a-essai-seul"));
+  assert.deepEqual(rows.map((r) => [r.line.id, r.supplement]), [[12, false], [13, false], [14, false]]);
 });

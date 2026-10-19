@@ -1,8 +1,10 @@
 import { useState } from "preact/hooks";
 import { embedded } from "@clawnify/app/client";
 import { Plus, ShoppingBag } from "lucide-preact";
+import { api } from "../../api";
 import { useApp } from "../../context";
 import { useAuth } from "../../auth-context";
+import { useLoad } from "../../hooks/use-load";
 import { useCalendarRange, useDoualaClock } from "../../hooks/use-journee";
 import { useWide } from "../../hooks/use-wide";
 import { Button } from "@/components/ui/button";
@@ -126,7 +128,7 @@ function Semaine({ day }: { day: string }) {
 export function Aujourdhui() {
   const { stats, navigate, openPanel, updateAppointment, setCalendarDate, setError } = useApp();
   const { account } = useAuth();
-  const { t, lang } = useI18n();
+  const { t, tn, lang } = useI18n();
   const commands = appointmentCommands(account.role);
   const wide = useWide();
   const clock = useDoualaClock();
@@ -135,6 +137,8 @@ export function Aujourdhui() {
   const figures = dayFigures(range.appointments, clock.day, clock.time);
   const [saving, setSaving] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  // Réservation en ligne (spec § 4.5) : compteur des demandes à traiter, rechargé à l'arrivée d'une demande.
+  const enLigne = useLoad(() => api<{ active: boolean; a_traiter: number }>("GET", "/api/demandes-en-ligne/compte"), ["demandes"]);
 
   /** L'agenda s'ouvre sur aujourd'hui, même s'il montrait un autre jour. */
   const toAgenda = () => { setCalendarDate(clock.day); navigate(pathFor("calendar", lang)); };
@@ -181,6 +185,9 @@ export function Aujourdhui() {
           {figures.plannedRevenue !== null && <ChiffreCle valeur={formatPrice(figures.plannedRevenue, lang)} libelle={t("accueil.ca_prevu")} />}
           {stats.low_stock_products > 0 && (
             <ChiffreCle valeur={stats.low_stock_products} libelle={t("tableau.stock_bas")} alerte onClick={() => navigate(pathFor("products", lang))} />
+          )}
+          {enLigne.data && (enLigne.data.active || enLigne.data.a_traiter > 0) && (
+            <ChiffreCle valeur={enLigne.data.a_traiter} libelle={tn("accueil.demandes_en_ligne", enLigne.data.a_traiter)} alerte={enLigne.data.a_traiter > 0} onClick={() => navigate(pathFor("demandes", lang))} />
           )}
         </div>
         {/* Compteurs de l'ancien menu (report de la vague 1) : toutes dates confondues. */}

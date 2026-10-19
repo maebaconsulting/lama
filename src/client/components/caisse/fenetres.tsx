@@ -13,7 +13,7 @@ import { useI18n } from "@/i18n/provider";
 import { matchesSearch } from "@/lib/bilingual";
 import { cardChoice, cardMatches } from "@/lib/crm";
 import { reasonLabel } from "@/lib/caisse-texte";
-import { formatPrice, parseAmount } from "@/lib/format";
+import { formatPrice, modeSaisieMontant, parseAmount, texteSaisie } from "@/lib/format";
 import { nameProblem } from "@/lib/forms";
 import { pointsText, type RewardChoice } from "@/lib/fidelite";
 import { rewardDiscount, type TicketDiscount } from "@/lib/ticket";
@@ -168,7 +168,7 @@ export function FenetreRemise({ subtotal, cap, current, onDone, onClose }: {
 }) {
   const { t, lang } = useI18n();
   const [kind, setKind] = useState<TicketDiscount["kind"]>(current?.kind ?? "percent");
-  const [value, setValue] = useState(current ? String(current.value) : "");
+  const [value, setValue] = useState(current ? (current.kind === "amount" ? texteSaisie(current.value, lang) : String(current.value)) : "");
   const [reason, setReason] = useState<TicketDiscount["reason"] | null>(current?.reason ?? null);
   const [note, setNote] = useState(current?.note ?? "");
   const amount = kind === "percent" ? Math.min(Math.round(Number(value.replace(",", ".")) || 0), 100) : parseAmount(value);
@@ -187,7 +187,7 @@ export function FenetreRemise({ subtotal, cap, current, onDone, onClose }: {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="remise-valeur">{kind === "percent" ? t("caisse.remise_pourcentage") : t("caisse.remise_montant")}</Label>
-          <Input id="remise-valeur" type="text" inputMode="numeric" value={value} onInput={(e: Event) => setValue((e.currentTarget as HTMLInputElement).value)} />
+          <Input id="remise-valeur" type="text" inputMode={kind === "percent" ? "numeric" : modeSaisieMontant()} value={value} onInput={(e: Event) => setValue((e.currentTarget as HTMLInputElement).value)} />
         </div>
         <div role="group" aria-label={t("caisse.motif")} className="grid grid-cols-3 gap-2">
           {DISCOUNT_REASONS.map((r) => (
@@ -222,8 +222,8 @@ export function FenetrePourboire({ staff, current, defaultStaff, onDone, onClose
   onDone: (tip: { amount: number; staff_id: number } | null) => void;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
-  const [value, setValue] = useState(current ? String(current.amount) : "");
+  const { t, lang } = useI18n();
+  const [value, setValue] = useState(current ? texteSaisie(current.amount, lang) : "");
   const [staffId, setStaffId] = useState<number | null>(current?.staff_id ?? defaultStaff ?? staff[0]?.id ?? null);
   const amount = parseAmount(value);
   return (
@@ -235,7 +235,7 @@ export function FenetrePourboire({ staff, current, defaultStaff, onDone, onClose
         </DialogHeader>
         <div className="space-y-1.5">
           <Label htmlFor="pourboire-montant">{t("caisse.montant")}</Label>
-          <Input id="pourboire-montant" type="text" inputMode="numeric" value={value} onInput={(e: Event) => setValue((e.currentTarget as HTMLInputElement).value)} />
+          <Input id="pourboire-montant" type="text" inputMode={modeSaisieMontant()} value={value} onInput={(e: Event) => setValue((e.currentTarget as HTMLInputElement).value)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="pourboire-praticienne">{t("caisse.praticienne")}</Label>

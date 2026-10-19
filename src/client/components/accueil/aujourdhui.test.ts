@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { translatePlural } from "../../i18n/translate.ts";
 
 /**
  * « Aujourd'hui » (sous-projet 4 § 5.2), câblé sur les règles de `lib/accueil.ts`
@@ -151,4 +152,17 @@ test("semaine de la gérante sous les chiffres du jour dès 42 rem de large (tab
   const semaine = vue.indexOf("<Semaine day={clock.day} />");
   assert.ok(semaine > vue.indexOf("accueil.rdv_a_venir") && semaine < vue.indexOf('{t("tableau.planning")}'), "juste après les chiffres du jour dans le document");
   assert.match(vue, /<section className="order-last space-y-2 @2xl:order-none">/);
+});
+
+test("compteur « Demandes en ligne » : montré dès que la réservation en ligne est activée ou qu'une demande attend, mène à l'écran", () => {
+  assert.match(vue, /useLoad\(\(\) => api<\{ active: boolean; a_traiter: number \}>\("GET", "\/api\/demandes-en-ligne\/compte"\), \["demandes"\]\)/);
+  assert.match(vue, /enLigne\.data && \(enLigne\.data\.active \|\| enLigne\.data\.a_traiter > 0\)/);
+  assert.match(vue, /libelle=\{tn\("accueil\.demandes_en_ligne", enLigne\.data\.a_traiter\)\} alerte=\{enLigne\.data\.a_traiter > 0\} onClick=\{\(\) => navigate\(pathFor\("demandes", lang\)\)\}/);
+});
+
+test("compteur « Demandes en ligne » : libellé accordé au nombre, en français et en anglais", () => {
+  assert.equal(translatePlural("fr", "accueil.demandes_en_ligne", 1), "Demande en ligne");
+  assert.equal(translatePlural("fr", "accueil.demandes_en_ligne", 2), "Demandes en ligne");
+  assert.equal(translatePlural("en", "accueil.demandes_en_ligne", 1), "Online request");
+  assert.equal(translatePlural("en", "accueil.demandes_en_ligne", 0), "Online requests");
 });

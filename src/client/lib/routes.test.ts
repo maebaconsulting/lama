@@ -157,3 +157,9 @@ test("ancienne adresse d'une fiche (/rendez-vous/12, /appointments/12) : la list
     }
   }
 });
+
+test("« Demandes en ligne » : adresse dans chaque langue", () => {
+  assert.equal(pathFor("demandes", "fr"), "/demandes-en-ligne");
+  assert.equal(pathFor("demandes", "en"), "/online-requests");
+  assert.equal(parseRoute("/online-requests").view, "demandes");
+});

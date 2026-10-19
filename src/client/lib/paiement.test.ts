@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DICTIONARIES } from "../i18n/translate.ts";
 import { aroundAmount, blockerText, changeText, discountLabel, methodLabel, vatLabel } from "./caisse-texte.ts";
-import { blocker, cashSuggestions, chooseMethod, PAD_KEYS, padAction, paymentsBody, pressKey, removeEntry, setReference, setTendered, settlementOf, startPayment, type PadKey } from "./paiement.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
+import { blocker, cashSuggestions, chooseMethod, PAD_KEYS, padAction, padKeys, paymentsBody, pressKey, removeEntry, setReference, setTendered, saisiePave, settlementOf, startPayment, type PadKey } from "./paiement.ts";
 
 /** Paiement de l'écran « Vente » (sous-projet 5 § 4.2), vérifié en exécution. */
 
@@ -114,4 +115,45 @@ test("clavier : chiffres, Retour arrière (« Effacer ») et Entrée (« Valider
   assert.equal(key("5", "controle"), "5");
   assert.equal(key("Backspace", "controle"), "effacer");
   assert.equal(key("Enter", "controle"), null, "Entrée sur « Retour au ticket » ou un moyen : action du bouton");
+});
+
+test("pavé en euros : virgule, deux décimales au plus, effacement exact, afficheur de la saisie en cours", () => {
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.deepEqual(padKeys().slice(-3), ["virgule", "0", "effacer"]);
+    let d = startPayment(["cash"]);
+    const press = (...keys: PadKey[]) => { for (const k of keys) d = pressKey(d, k, 10000); };
+    press("1", "5");
+    assert.equal(d.entries[0].amount, 1500);
+    assert.equal(saisiePave(d.entries[0], "fr"), "15,00");
+    press("virgule");
+    assert.equal(saisiePave(d.entries[0], "fr"), "15,");     // la virgule tapée se voit
+    press("5");
+    assert.equal(d.entries[0].amount, 1550);
+    assert.equal(saisiePave(d.entries[0], "fr"), "15,5");
+    assert.equal(saisiePave(d.entries[0], "en"), "15.5");
+    press("0", "9");                                   // troisième décimale ignorée
+    assert.equal(d.entries[0].amount, 1550);
+    assert.equal(saisiePave(d.entries[0], "fr"), "15,50");
+    press("effacer");
+    assert.equal(d.entries[0].amount, 1550 - 0);      // efface le « 0 » des centimes
+    assert.equal(d.entries[0].fraction, 1);
+    press("effacer", "effacer");                      // efface le « 5 », puis la virgule
+    assert.equal(d.entries[0].amount, 1500);
+    assert.equal("fraction" in d.entries[0], false);  // clé retirée hors de la partie décimale
+    press("effacer");
+    assert.equal(d.entries[0].amount, 100);
+    assert.equal(padAction({ key: ",", ctrlKey: false, metaKey: false, altKey: false }, "libre"), "virgule");
+    assert.equal(padAction({ key: ".", ctrlKey: false, metaKey: false, altKey: false }, "libre"), "virgule");
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("pavé en XAF : « 000 », pas de virgule, versements sans clé fraction", () => {
+  assert.deepEqual(padKeys().slice(-3), ["000", "0", "effacer"]);
+  assert.equal(padAction({ key: ",", ctrlKey: false, metaKey: false, altKey: false }, "libre"), null);
+  const d = pressKey(startPayment(["cash"]), "7", 59000);
+  assert.deepEqual(d.entries, [{ method: "cash", amount: 7, reference: "", proposed: false }]);
+  assert.equal(saisiePave(d.entries[0], "fr"), "7");
 });

@@ -20,6 +20,6 @@
       "react-dom": ["./node_modules/preact/compat"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "relais/**/*.ts", "relais/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "relais/**/*.test.ts", "relais/dist"]
 }

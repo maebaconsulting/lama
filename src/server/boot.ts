@@ -13,6 +13,7 @@ import { generateIdentity, identityToRecipient } from "age-encryption";
 import api, { type AppBindings } from "./index.ts";
 import { MIGRATIONS, runMigrations } from "./migrations.ts";
 import { publish } from "./realtime.ts";
+import { chargerDevise } from "./devise.ts";
 import { getSetting, setMasterKey } from "./settings.ts";
 import { openDatabase, sqliteStorage } from "./storage.ts";
 import { registerHandler } from "./outbox/outbox.ts";
@@ -25,6 +26,7 @@ import { smsProviderFromSettings } from "./sms/passerelle.ts";
 import { renderDocument } from "./whatsapp/pdf-document.ts";
 import { startReminders } from "./whatsapp/rappels.ts";
 import { startRelances } from "./crm/relances.ts";
+import { startEnLigne } from "./en-ligne/boucle.ts";
 import { CHEMINS_HTTP, redirectionHttps, routesCertificat } from "./certificat/routes.ts";
 import { horlogeTimedatectl } from "./heure/horloge.ts";
 import { lirePaire, signaturePaire, surveillerPaire, type Rechargeur } from "./tls/contexte.ts";
@@ -227,6 +229,7 @@ export async function start(demande: Config = readConfig()): Promise<Running> {
   const env: AppBindings = { STORAGE: sqliteStorage(db), MASTER_KEY: loadMasterKey(config.configDir, config.dev || config.demoPublique === true), ...(config.formation ? {} : { HORLOGE: horlogeTimedatectl() }) };
   initDB(env);
   setMasterKey(env.MASTER_KEY!);
+  await chargerDevise();
   if (config.demoPublique) {
     // Démonstration publique (DP-02) : à chaque démarrage, fiches, puis les comptes publics et l'administration, puis l'historique.
     const lang = langFromEnv(process.env);
@@ -299,6 +302,9 @@ export async function start(demande: Config = readConfig()): Promise<Running> {
   const stopReminders = startReminders({ storage: env.STORAGE, onChange: () => publish({ resource: "outbox" }) });
   // Relances du mini CRM (anniversaire, « vous nous manquez ») : même rythme et même signal que les rappels.
   const stopRelances = startRelances({ storage: env.STORAGE, onChange: () => publish({ resource: "outbox" }) });
+  // Réservation en ligne (spec du 16/10/2026 § 4.3) : boucle d'échange avec le relais, sans effet tant que la liaison n'est pas réglée ;
+  // jamais dans la base de formation (D-17), comme la file d'envoi.
+  const stopEnLigne = config.formation ? () => undefined : startEnLigne({ storage: env.STORAGE, signaler: (resource) => publish({ resource }) });
   // Démonstration publique (DP-05) : à 3 h de Douala, demande de remise, maintenance, arrêt ; Docker relance et la remise s'applique au démarrage.
   const backup = env.BACKUP;
   const nuit = config.demoPublique ? programmerRemiseNocturne({ now: Date.now, remettre: () => remettreCetteNuit(config.dataDir, backup.requestRestart) }) : null;
@@ -316,6 +322,7 @@ export async function start(demande: Config = readConfig()): Promise<Running> {
     stopOutbox();
     stopReminders();
     stopRelances();
+    stopEnLigne();
     nuit?.arreter();
     reloader?.arreter();
   };

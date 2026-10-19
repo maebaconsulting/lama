@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  changeBreakdown, creditTotals, dayBounds, discountAmount, documentNumber, exceedsCap, formatFrancs, quickAmounts, saleTotals, settle, vatSplit, wholeFrancs, yearAt,
+  changeBreakdown, creditTotals, dayBounds, discountAmount, documentNumber, exceedsCap, quickAmounts, saleTotals, settle, vatSplit, yearAt,
 } from "./caisse.ts";
+import { definirDevise } from "./devise-active.ts";
+import { entierMineur } from "./montants.ts";
 
 /** Calculs de la caisse (sous-projet 5 § 4.4), mêmes à l'écran et au serveur. */
 
@@ -38,21 +40,8 @@ test("totaux d'une vente : TVA sur le total remisé, pourboire ajouté au montan
     tip: 2000,
   });
   assert.deepEqual(totals, { subtotal: 60000, discount_amount: 3000, total_ttc: 57000, total_ht: 47799, total_tva: 9201, tip: 2000, due: 59000 });
-  assert.equal(wholeFrancs(12500.4), 12500, "prix du catalogue arrondi à l'entier");
-  assert.equal(wholeFrancs(-3), 0);
-});
-
-/**
- * Mineur 3 de la relecture finale (final-review.md) : les messages du serveur
- * (versements refusés, cible du journal) groupent les milliers comme l'écran,
- * avec la même espace fine insécable, plutôt qu'un nombre brut.
- */
-test("formatFrancs : milliers groupés par une espace fine insécable, comme à l'écran", () => {
-  assert.equal(formatFrancs(59000), "59\u202f000");
-  assert.equal(formatFrancs(5000), "5\u202f000");
-  assert.equal(formatFrancs(350), "350");
-  assert.equal(formatFrancs(0), "0");
-  assert.equal(formatFrancs(12500.4), "12\u202f500", "arrondi à l'entier, comme wholeFrancs");
+  assert.equal(entierMineur(12500.4), 12500, "prix du catalogue arrondi à l'entier");
+  assert.equal(entierMineur(-3), 0);
 });
 
 test("montants rapides : exact puis les trois montants ronds au-dessus", () => {
@@ -135,4 +124,40 @@ test("année et jour de Douala ; numéro sur six chiffres", () => {
   assert.equal(yearAt(Date.parse("2026-12-31T23:00:00Z")), 2027, "minuit à Douala : la suite de l'année nouvelle");
   assert.deepEqual(dayBounds("2026-09-30"), { start: Date.parse("2026-09-29T23:00:00Z"), end: Date.parse("2026-09-30T23:00:00Z") });
   assert.equal(documentNumber("FAC", 2026, 12), "FAC-2026-000012");
+});
+
+test("montants rapides et rendu de monnaie en euros", () => {
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.deepEqual(quickAmounts(1250), [1500, 2000, 5000]);       // 12,50 € : 15, 20, 50
+    assert.deepEqual(quickAmounts(4800), [5000, 6000, 7500]);       // 48 € : 50, 60, puis par 25 € (dernier palier ÷ 2)
+    assert.deepEqual(changeBreakdown(3787), {                       // 37,87 €
+      parts: [{ value: 2000, count: 1, kind: "billet" }, { value: 1000, count: 1, kind: "billet" }, { value: 500, count: 1, kind: "billet" },
+        { value: 200, count: 1, kind: "piece" }, { value: 50, count: 1, kind: "piece" }, { value: 20, count: 1, kind: "piece" },
+        { value: 10, count: 1, kind: "piece" }, { value: 5, count: 1, kind: "piece" }, { value: 2, count: 1, kind: "piece" }],
+      rest: 0,
+    });
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("devise sans pièces : l'appoint est ce qui reste sous le plus petit billet", () => {
+  definirDevise({ code: "GNF", position: null, symboleEcran: true });
+  try {
+    assert.deepEqual(changeBreakdown(1300), { parts: [{ value: 1000, count: 1, kind: "billet" }], rest: 300 });
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+// Non-régression : `discountAmount` et `vatSplit` ne lisent pas la devise ; ce test passe déjà avant le changement.
+test("non-régression : remise en pourcentage arrondie au centime ; TVA en centimes", () => {
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.equal(discountAmount(1999, { kind: "percent", value: 15 }), 300); // 2,9985 € : 3,00 €
+    assert.deepEqual(vatSplit(1999, { active: true, rate: 20 }), { ht: 1666, tva: 333 });
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
 });

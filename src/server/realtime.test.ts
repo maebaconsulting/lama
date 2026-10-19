@@ -87,3 +87,8 @@ test("publishMaintenance() : tout abonné est notifié, l'abonnement se résilie
 test("un transfert de rendez-vous publie les rendez-vous (agenda et listes rechargés partout)", () => {
   assert.equal(resourceFor("/api/transfers"), "appointments");
 });
+
+test("une action sur une demande en ligne publie les demandes (liste et compteur rechargés partout)", () => {
+  assert.equal(resourceFor("/api/demandes-en-ligne/4/confirmer"), "demandes_en_ligne");
+  assert.equal(resourceFor("/api/en-ligne/etat"), "settings");
+});

@@ -33,7 +33,7 @@ test("les champs de prix passent par parseAmount", () => {
  * transmet jamais une saisie avec espace comme « 15 000 » (la valeur arrive
  * vide et `parseAmount` enregistre 0 sans prévenir). Les champs de montant
  * (prix de la prestation, prix et coût du produit) sont donc du texte
- * (`type="text" inputMode="numeric"`), jamais `type="number"`. La durée et
+ * (`type="text"`, clavier donné par `modeSaisieMontant()` : décimal pour une devise à centimes, numérique sinon), jamais `type="number"`. La durée et
  * les quantités entières (stock, seuil) restent `type="number"`.
  */
 /** Balises `<Input … />` d'un fichier (les attributs peuvent contenir `>` dans une flèche `=>`). */
@@ -57,7 +57,7 @@ test("aucun champ de montant n'est type=\"number\" (décision du contrôleur, é
       assert.ok(tag, `${name} : champ ${id} introuvable`);
       assert.doesNotMatch(tag!, /type="number"/, `${name} ${id}`);
       assert.match(tag!, /type="text"/, `${name} ${id}`);
-      assert.match(tag!, /inputMode="numeric"/, `${name} ${id}`);
+      assert.match(tag!, /inputMode=\{modeSaisieMontant\(\)\}/, `${name} ${id}`);
     }
   }
 });

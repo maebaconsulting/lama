@@ -7,6 +7,7 @@
  */
 import type { Role } from "./auth-types.ts";
 import type { Invoice, InvoiceLine, SaleSettings } from "./caisse-types.ts";
+import { orderedLines } from "../../shared/supplements.ts";
 import { creditTotals, PAYMENT_METHODS, REFERENCE_REQUIRED, type PaymentMethod } from "../../shared/caisse.ts";
 
 export interface CreditDraftLine {
@@ -53,6 +54,33 @@ export function startCredit(invoice: Invoice, requestId: string): CreditDraft {
 /** « Tout reprendre » : chaque ligne à son reste. */
 export function takeAll(invoice: Invoice, draft: CreditDraft): CreditDraft {
   return { ...draft, lines: draft.lines.map((d) => ({ ...d, quantity: remainingOf(invoice.lines.find((l) => l.id === d.line_id)!) })) };
+}
+
+/** Lignes du formulaire dans l'ordre d'affichage : chaque supplément sous sa prestation (spec du 18/10/2026 § 3.5). */
+export function draftRows(invoice: Invoice, draft: CreditDraft): { draft: CreditDraftLine; line: InvoiceLine; supplement: boolean }[] {
+  const lines = draft.lines.flatMap((d) => invoice.lines.filter((l) => l.id === d.line_id));
+  return orderedLines(lines).map((l) => ({ draft: draft.lines.find((d) => d.line_id === l.id)!, line: l, supplement: l.supplement }));
+}
+
+/** Vrai si un supplément de la ligne `parentLineId` n'est pas encore repris à son reste. */
+export function supplementsLeft(invoice: Invoice, draft: CreditDraft, parentLineId: number): boolean {
+  return draft.lines.some((d) => {
+    const line = invoice.lines.find((l) => l.id === d.line_id);
+    if (!line || line.parent_line_id !== parentLineId) return false;
+    return d.quantity < remainingOf(line);
+  });
+}
+
+/** « Reprendre aussi ses suppléments » : chaque supplément de la prestation à son reste. */
+export function takeSupplements(invoice: Invoice, draft: CreditDraft, parentLineId: number): CreditDraft {
+  return {
+    ...draft,
+    lines: draft.lines.map((d) => {
+      const line = invoice.lines.find((l) => l.id === d.line_id);
+      if (!line || line.parent_line_id !== parentLineId) return d;
+      return { ...d, quantity: remainingOf(line) };
+    }),
+  };
 }
 
 /** − et + d'une ligne : entre 0 et son reste ; revenue à 0, sa case « Remettre en stock » se décoche. */

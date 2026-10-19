@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatFrancsDocument } from "../../shared/caisse.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
+import { COLUMNS, pairLines } from "../impression/escpos.ts";
 import { ticketFiscal } from "./routes.ts";
 import { discountReasonText, printable, ticketDate, ticketInstant, ticketRows, type TicketDocument, type TicketRow } from "./ticket.ts";
 
@@ -40,11 +41,6 @@ function invoice(over: Partial<TicketDocument> = {}): TicketDocument {
 function lines(rows: TicketRow[]): string[] {
   return rows.map((r) => (r.type === "rule" ? "----" : r.type === "pair" ? `${r.left} | ${r.right}` : r.text));
 }
-
-test("montant d'un document : « 13 000 FCFA », milliers et devise insécables", () => {
-  assert.equal(formatFrancsDocument(13000), "13\u202f000\u00a0FCFA");
-  assert.equal(formatFrancsDocument(0), "0\u00a0FCFA");
-});
 
 test("facture en français : en-tête, lignes, remise et motif, HT, TVA, TTC, versements, monnaie, pourboire hors facture, pied", () => {
   const nb = "\u00a0";
@@ -294,4 +290,67 @@ test("V1-79 : reçu d'acompte relu, sort imprimé sous « Acompte reçu » aprè
   assert.equal(ticketDate(at), "04/10/2026");
   // Une facture ne porte jamais de sort, même si le champ traînait.
   assert.ok(!lines(ticketRows(invoice({ fate: { kind: "kept", at } }))).some((l) => l.startsWith("Gardé")));
+});
+
+const LOYALTY = { earned: 120, reward: 0, taken: 0, restored: 0, balance: 340 };
+
+test("ticket en euros : montants à centimes, libellé EUR, points sans décimales, 48 colonnes", () => {
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    const rows = ticketRows(invoice({ total_ttc: 150000000, loyalty: LOYALTY }));
+    const flat = rows.flatMap((r) => (r.type === "pair" ? pairLines(r.left, r.right, COLUMNS) : r.type === "text" ? [r.text] : []));
+    assert.ok(flat.some((l) => l.endsWith("1\u00a0500\u00a0000,00\u00a0EUR")), flat.join("\n"));
+    assert.ok(flat.every((l) => [...l].length <= COLUMNS), flat.join("\n"));
+    assert.ok(lines(rows).some((l) => l.endsWith("| +120")), lines(rows).join("\n"));
+    assert.ok(!lines(rows).some((l) => /FCFA|\u00a0F$|120,00/.test(l)), lines(rows).join("\n"));
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("ticket en dollars, symbole avant : USD avant le nombre", () => {
+  definirDevise({ code: "USD", position: null, symboleEcran: true });
+  try {
+    assert.ok(lines(ticketRows(invoice({ total_ttc: 1550, lang: "en" }))).some((l) => l.endsWith("| USD\u00a015.50")));
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
+});
+
+test("suppléments : chacun en retrait sous sa prestation, avec son prix ; « quantité × prix » seulement au-delà de 1", () => {
+  const nb = "\u00a0";
+  const doc = invoice({
+    lines: [
+      { id: 1, parent_line_id: null, label_fr: "Tresses", label_en: "Braids", quantity: 1, unit_price: 15000, line_total: 15000, staff_name: "Awa" },
+      { id: 2, parent_line_id: null, label_fr: "Crème hydratante", label_en: "", quantity: 1, unit_price: 35000, line_total: 35000, staff_name: null },
+      { id: 3, parent_line_id: 1, label_fr: "Mèches", label_en: "Extensions", quantity: 1, unit_price: 5000, line_total: 5000, staff_name: "Awa" },
+      { id: 4, parent_line_id: 1, label_fr: "Perles", label_en: "", quantity: 2, unit_price: 500, line_total: 1000, staff_name: "Awa" },
+    ],
+  });
+  const rows = lines(ticketRows(doc));
+  const debut = rows.indexOf(`Tresses | 15${nb}000${nb}FCFA`);
+  assert.ok(debut > 0);
+  assert.deepEqual(rows.slice(debut, debut + 8), [
+    `Tresses | 15${nb}000${nb}FCFA`,
+    `1${nb}×${nb}15${nb}000${nb}FCFA · Awa`,
+    `${nb}${nb}+${nb}Mèches | 5${nb}000${nb}FCFA`,
+    `${nb}${nb}+${nb}Perles | 1${nb}000${nb}FCFA`,
+    `${nb}${nb}+${nb}2${nb}×${nb}500${nb}FCFA`,
+    `Crème hydratante | 35${nb}000${nb}FCFA`,
+    `1${nb}×${nb}35${nb}000${nb}FCFA`,
+    "----",
+  ]);
+  assert.ok(lines(ticketRows({ ...doc, lang: "en" })).some((r) => r.startsWith(`${nb}${nb}+${nb}Extensions | `)), "désignation anglaise en anglais");
+  assert.ok(lines(ticketRows({ ...doc, lang: "en" })).includes(`${nb}${nb}+${nb}Perles | 1${nb}000${nb}FCFA`), "repli français d'un supplément libre sans désignation anglaise");
+});
+
+test("avoir qui ne reprend qu'un supplément : sa prestation n'est pas sur l'avoir, aucun retrait", () => {
+  const nb = "\u00a0";
+  const rows = lines(ticketRows(invoice({
+    kind: "credit_note", number: "AV-2026-000001", credited_number: "FAC-2026-000001", reason: "Retour",
+    lines: [{ id: 9, parent_line_id: 1, label_fr: "Mèches", label_en: "Extensions", quantity: 1, unit_price: 5000, line_total: 5000, staff_name: "Awa" }],
+    total_ttc: 5000, subtotal: 5000, discount_amount: 0,
+  })));
+  assert.ok(rows.includes(`Mèches | 5${nb}000${nb}FCFA`));
+  assert.ok(!rows.some((r) => r.startsWith(`${nb}${nb}+`)));
 });

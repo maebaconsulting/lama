@@ -1,9 +1,12 @@
 import { useState } from "preact/hooks";
 import { Mail, Phone } from "lucide-preact";
+import { api } from "../../api";
 import { useApp } from "../../context";
+import { useLoad } from "../../hooks/use-load";
 import { useAuth } from "../../auth-context";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/provider";
+import { pickText } from "@/lib/bilingual";
 import { todayAt } from "@/lib/calendrier";
 import { catalogCommands, telHref } from "@/lib/fiches";
 import { EMPTY } from "@/lib/format";
@@ -11,11 +14,15 @@ import { STAFF_INKS, toInk } from "@/lib/inks";
 import { pathFor } from "@/lib/routes";
 import { canManageAppointments } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { JOURS, type Semaine } from "../../../shared/horaires";
 import type { Staff } from "../../types";
 import { Succes } from "../champ";
 import { CreateStaff } from "../create-staff";
+import { resumeJour } from "../reglages/editeur-semaine";
 import { TransfertRdv } from "../transfert-rdv";
 import { ACTION, EnTeteFiche, LigneDetail, PastilleEncre, SuppressionFiche } from "./corps-fiche";
+import { HorairesMembre } from "./horaires-membre";
+import { PrestationsMembre } from "./prestations-membre";
 
 const FOCUS = "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-ring";
 const LIEN = cn("flex min-h-11 items-center gap-2 break-all underline decoration-filet underline-offset-4 hover:decoration-foreground", FOCUS);
@@ -29,7 +36,7 @@ const LIEN = cn("flex min-h-11 items-center gap-2 break-all underline decoration
  * « Transférer ses rendez-vous » pour la gérante et la réception (spec du 04/10/2026).
  */
 export function FicheMembre({ staff }: { staff: Staff }) {
-  const { updateStaff, deleteStaff, navigate, setCalendarDate, setAgendaStaffId, setError } = useApp();
+  const { updateStaff, deleteStaff, navigate, setCalendarDate, setAgendaStaffId, setError, services } = useApp();
   const { account } = useAuth();
   const { t, tn, lang } = useI18n();
   const commands = catalogCommands(account.role);
@@ -40,6 +47,14 @@ export function FicheMembre({ staff }: { staff: Staff }) {
   const [transferNotice, setTransferNotice] = useState<string | null>(null);
   // Transfert des rendez-vous (spec du 04/10/2026, décision 13) : gérante et réception, comme « Déplacer ».
   const transfer = canManageAppointments(account.role);
+  const { data: horairesData } = useLoad(() => api<{ institut: Semaine }>("GET", "/api/horaires"), ["settings"]);
+  const [editHoraires, setEditHoraires] = useState(false);
+  const [editPrestations, setEditPrestations] = useState(false);
+  const pratiquees = services.filter((s) => staff.service_ids.includes(s.id)).map((s) => pickText(lang, s.name, s.name_en));
+  const toggleEnLigne = async () => {
+    try { await updateStaff(staff.id, { en_ligne: staff.en_ligne ? 0 : 1 }); } catch (err) { setError((err as Error).message); }
+  };
+
   const call = telHref(staff.phone);
   const ink = STAFF_INKS.find((i) => i.hex.toLowerCase() === toInk(staff.color).toLowerCase());
 
@@ -92,6 +107,40 @@ export function FicheMembre({ staff }: { staff: Staff }) {
         </LigneDetail>
       </dl>
 
+      <section className="space-y-3 border-t border-filet pt-4" aria-label={t("membre.horaires")}>
+        <h3 className="text-sm font-medium">{t("membre.horaires")}</h3>
+        {staff.horaires === null && <p className="text-sm text-muted-foreground">{t("membre.comme_institut")}</p>}
+        {(staff.horaires ?? horairesData?.institut) && (
+          <dl className="grid gap-1 text-sm">
+            {JOURS.map((j) => (
+              <div key={j} className="flex justify-between gap-4">
+                <dt>{t(`jour.${j}`)}</dt>
+                <dd className="chiffres-tabulaires">{resumeJour((staff.horaires ?? horairesData!.institut)[j], t(staff.horaires ? "horaires.repos" : "horaires.ferme"))}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {commands.manage && horairesData && <Button variant="outline" onClick={() => setEditHoraires(true)}>{t("membre.modifier_horaires")}</Button>}
+      </section>
+
+      <section className="space-y-3 border-t border-filet pt-4" aria-label={t("membre.prestations_pratiquees")}>
+        <h3 className="text-sm font-medium">{t("membre.prestations_pratiquees")}</h3>
+        <p className="text-sm">{pratiquees.length ? pratiquees.join(", ") : t("membre.aucune_prestation")}</p>
+        {commands.manage && <Button variant="outline" onClick={() => setEditPrestations(true)}>{t("membre.modifier_prestations")}</Button>}
+      </section>
+
+      <section className="space-y-2 border-t border-filet pt-4">
+        {commands.manage ? (
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="checkbox" checked={Boolean(staff.en_ligne)} onChange={() => void toggleEnLigne()} />
+            {t("membre.en_ligne")}
+          </label>
+        ) : (
+          <p className="text-sm">{t("membre.en_ligne")}{"\u00a0"}: {staff.en_ligne ? t("commun.oui") : t("commun.non")}</p>
+        )}
+        <p className="text-xs text-muted-foreground">{t("membre.en_ligne_aide")}</p>
+      </section>
+
       {commands.manage && (
         <div className="space-y-3 border-t border-filet pt-4">
           <Button variant="outline" disabled={saving} onClick={toggle}>
@@ -111,6 +160,8 @@ export function FicheMembre({ staff }: { staff: Staff }) {
 
       {editing && <CreateStaff key={staff.id} staff={staff} onClose={() => setEditing(false)} />}
       {transferring && <TransfertRdv staffId={staff.id} staffName={staff.name} day={null} onClose={() => setTransferring(false)} onDone={setTransferNotice} />}
+      {editHoraires && horairesData && <HorairesMembre staff={staff} institut={horairesData.institut} onClose={() => setEditHoraires(false)} />}
+      {editPrestations && <PrestationsMembre staff={staff} onClose={() => setEditPrestations(false)} />}
     </div>
   );
 }

@@ -15,7 +15,7 @@ const racine = (path: string) => readFileSync(new URL(`../../../${path}`, import
 
 test("V1-54 : « Remboursé X sur Y » suit la frappe du montant remboursé", () => {
   const avoir = read("./caisse/formulaire-avoir.tsx");
-  assert.match(avoir, /id=\{`avoir-montant-\$\{i\}`\}[\s\S]{0,400}?onInput=\{\(e: Event\) => setDraft\(setRefund\(draft, i, \{ amount: typeAmount\(e, r\.amount, lang\) \}\)\)\}/);
+  assert.match(avoir, /id=\{`avoir-montant-\$\{i\}`\}[\s\S]{0,400}?onInput=\{\(e: Event, avant: string\) => setDraft\(setRefund\(draft, i, \{ amount: typeAmount\(e, r\.amount, lang, avant\) \}\)\)\}/);
   assert.doesNotMatch(avoir, /onChange=\{\(e: Event\) => setDraft\(setRefund\(draft, i, \{ amount:/);
 });
 

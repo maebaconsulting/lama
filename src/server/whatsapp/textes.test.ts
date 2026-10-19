@@ -43,6 +43,12 @@ test("enregistrement d'un texte : variable inconnue, texte vide ou trop long ref
 
 test("prénom : premier mot du nom ; date en toutes lettres dans la langue du message", () => {
   assert.equal(firstName("  Aïcha Mbarga "), "Aïcha");
+  assert.equal(firstName("N'Dri Kouassi"), "N'Dri");
+  assert.equal(firstName("Marie-Claire Ébodé"), "Marie-Claire");
+  for (const forge of ["http://x.cm gratuit", "www.x.cm Ngo", "+237690000000", "0690 Ngo", "x@exemple.cm"]) {
+    assert.equal(firstName(forge), "", forge);
+  }
+  assert.equal(renderTemplate("Bonjour {prenom}, à bientôt.", { prenom: "" }), "Bonjour, à bientôt.");
   assert.equal(formatDay("2026-10-02", "fr"), "vendredi 2 octobre");
   assert.equal(formatDay("2026-10-02", "en"), "Friday 2 October");
 });
@@ -115,7 +121,7 @@ test("texte d'un produit recommandé (images des produits) : défaut de la spec,
 });
 
 test("modèles du mini CRM : anniversaire, absence et campagne, variables de la cliente seulement, un SMS chacun", () => {
-  assert.deepEqual(TEMPLATE_KINDS, ["confirmation", "rappel", "ticket", "produit", "anniversaire", "absence", "campagne", "transfert"]);
+  assert.deepEqual(TEMPLATE_KINDS, ["confirmation", "rappel", "ticket", "produit", "anniversaire", "absence", "campagne", "transfert", "en_ligne_confirmation", "en_ligne_autre_horaire", "en_ligne_refus", "en_ligne_rappel"]);
   for (const kind of ["anniversaire", "absence", "campagne"] as const) {
     assert.deepEqual(variablesOf(kind), ["prenom", "nom", "institut", "telephone"], kind);
     for (const lang of ["fr", "en"] as const) {
@@ -175,4 +181,22 @@ test("modèle de transfert (spec du 04/10/2026, décision 11) : variables d'une 
     renderTemplate(DEFAULT_TEXTS.transfert.en, { ...VALUES, prestation: "Braids", date: "Friday 2 October", praticienne: "Grace" }),
     "Hello Aïcha, your Braids appointment on Friday 2 October at 10:00 at Institut Ébène will be with Grace.",
   );
+});
+
+test("réservation en ligne : quatre textes réglables, variables propres, typographie, deux SMS au plus", () => {
+  assert.deepEqual(variablesOf("en_ligne_confirmation"), ["prenom", "nom", "date", "heure", "prestation", "institut", "telephone", "praticienne"]);
+  assert.deepEqual(variablesOf("en_ligne_autre_horaire"), variablesOf("en_ligne_confirmation"));
+  assert.deepEqual(variablesOf("en_ligne_refus"), ["prenom", "nom", "date", "heure", "prestation", "institut", "telephone"]);
+  assert.deepEqual(variablesOf("en_ligne_rappel"), ["prenom", "nom", "institut", "telephone", "prestation"]);
+  for (const kind of ["en_ligne_confirmation", "en_ligne_autre_horaire", "en_ligne_refus", "en_ligne_rappel"] as const) {
+    for (const lang of ["fr", "en"] as const) {
+      const text = DEFAULT_TEXTS[kind][lang];
+      assert.equal(templateProblem(text, kind), null, `${kind} ${lang}`);
+      assert.ok(estimateTemplate(text) <= 2, `${kind} ${lang} : deux SMS au plus`);
+      assert.doesNotMatch(text, /booking/i);
+    }
+    assert.deepEqual(frenchFaults(DEFAULT_TEXTS[kind].fr), [], kind);
+    assert.deepEqual(englishFaults(DEFAULT_TEXTS[kind].en), [], kind);
+  }
+  assert.match(decode("fr", templateProblem("Votre rendez-vous du {date}", "en_ligne_rappel")!), /^Variable inconnue\u00a0: \{date\}\./);
 });

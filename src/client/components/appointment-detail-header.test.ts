@@ -110,3 +110,8 @@ test("brouillons de note oubliés quand l'app se démonte (Verrouiller, déconne
 test("l'échec de la suppression d'une note remonte dans le bandeau d'erreur", () => {
   assert.match(fiche, /onConfirm=\{\(\) => deleteAppointmentNote\(noteASupprimer\.id\)\.catch\(\(err: Error\) => setError\(err\.message\)\)\}/);
 });
+
+test("fiche du rendez-vous : mention « En ligne » pour un rendez-vous venu d'une demande", () => {
+  const fiche = readFileSync(new URL("./appointment-detail.tsx", import.meta.url), "utf8");
+  assert.match(fiche, /\{Boolean\(apt\.en_ligne\) && <span className="etiquette text-encre-grise">\{t\("rdv\.en_ligne"\)\}<\/span>\}/);
+});

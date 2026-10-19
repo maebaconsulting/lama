@@ -3,7 +3,7 @@ import { X } from "lucide-preact";
 import { api } from "../../api";
 import type { Setting } from "../../lib/api-types";
 import { pointsText } from "../../lib/fidelite";
-import { formatPrice } from "../../lib/format";
+import { formatPrice, modeSaisieMontant } from "../../lib/format";
 import {
   addTier, EXAMPLE_AMOUNT, examplePoints, savedMessage, fideliteChanges, fideliteForm, MAX_TIERS, removeTier, setTier, type FideliteField, type FideliteForm,
 } from "../../lib/reglages-fidelite";
@@ -33,14 +33,14 @@ export function Fidelite() {
   const [form, setForm] = useState<FideliteForm | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Clé du message (pas le texte traduit : une bascule de langue retraduit) et champ fautif, dit sous lui.
-  const [fieldError, setFieldError] = useState<{ field: FideliteField; message: Key } | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: FideliteField; message: Key; values?: { min: number; max: number } } | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   // Rechargement : une saisie en cours est gardée ; sans saisie, les valeurs du serveur sont reprises.
   useEffect(() => {
     if (!data) return;
-    const fresh = fideliteForm(data.settings);
+    const fresh = fideliteForm(data.settings, lang);
     if (!form || !baseline || JSON.stringify(form) === JSON.stringify(baseline)) setForm(fresh);
     setBaseline(fresh);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -61,7 +61,7 @@ export function Fidelite() {
   const pendingChanges = fideliteChanges(baseline, form);
   const dirty = "error" in pendingChanges || pendingChanges.changes.length > 0;
   const example = examplePoints(form);
-  const errorFor = (field: FideliteField) => (fieldError?.field === field ? t(fieldError.message) : null);
+  const errorFor = (field: FideliteField) => (fieldError?.field === field ? t(fieldError.message, fieldError.values && { min: formatPrice(fieldError.values.min, lang), max: formatPrice(fieldError.values.max, lang) }) : null);
   const invalid = (field: FideliteField) => ({
     "aria-invalid": errorFor(field) ? true : undefined,
     "aria-describedby": errorFor(field) ? `fidelite-${field}-erreur` : undefined,
@@ -75,7 +75,7 @@ export function Fidelite() {
     setFieldError(null);
     const result = fideliteChanges(baseline, form);
     if ("error" in result) {
-      setFieldError({ field: result.field, message: result.error });
+      setFieldError({ field: result.field, message: result.error, values: result.values });
       document.getElementById(`fidelite-${result.field}`)?.focus();
       return;
     }
@@ -115,7 +115,7 @@ export function Fidelite() {
                 {errorFor("points") && <p id="fidelite-points-erreur" className="text-sm text-encre-rouge">{errorFor("points")}</p>}
               </div>
               <div className="space-y-1">
-                <Champ id="fidelite-tranche" label={t("reglages_fidelite.tranche")} inputMode="numeric" autoComplete="off" value={form.tranche} onInput={input((v) => ({ ...form, tranche: v }))} {...invalid("tranche")} />
+                <Champ id="fidelite-tranche" label={t("reglages_fidelite.tranche")} inputMode={modeSaisieMontant()} autoComplete="off" value={form.tranche} onInput={input((v) => ({ ...form, tranche: v }))} {...invalid("tranche")} />
                 {errorFor("tranche") && <p id="fidelite-tranche-erreur" className="text-sm text-encre-rouge">{errorFor("tranche")}</p>}
               </div>
             </div>
@@ -141,7 +141,7 @@ export function Fidelite() {
                     <Champ
                       id={`fidelite-palier-${i}-montant`}
                       label={t("reglages_fidelite.palier_montant", { numero: i + 1 })}
-                      inputMode="numeric"
+                      inputMode={modeSaisieMontant()}
                       autoComplete="off"
                       value={tier.montant}
                       onInput={input((v) => setTier(form, i, { montant: v }))}

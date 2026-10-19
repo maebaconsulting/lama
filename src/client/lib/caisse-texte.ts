@@ -23,7 +23,7 @@ export function methodLabel(method: PaymentMethod, lang: Lang): string {
 /**
  * Coupures suggérées pour rendre la monnaie (§ 4.2) : « 1 billet de 10 000 +
  * 1 billet de 1 000 » ; `court` (téléphone) : « 10 000 + 1 000 », « 2 × 100 ».
- * Moins de 10 francs restants : dits à part (petite monnaie). Espaces
+ * Ce qui reste sous la plus petite coupure : dit à part (petite monnaie). Espaces
  * insécables dans chaque terme, sécables seulement autour de « + ».
  */
 export function changeText(amount: number, lang: Lang, court = false): string {

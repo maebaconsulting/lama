@@ -54,8 +54,8 @@ test("changement de prix d'une prestation et d'un produit, correction de stock :
   assert.equal((await call("PUT", `/api/services/${service}`, { price: 12000 })).status, 200);
   assert.equal((await call("PUT", `/api/products/${product}`, { price: 4500, stock: 8 })).status, 200);
   assert.deepEqual(lines().map((l) => [l.action, l.target]), [
-    ["prestation.prix", "Tresses essai\u00a0: 15\u202f000 → 12\u202f000\u00a0F"],
-    ["produit.prix", "Huile de coco essai\u00a0: 4\u202f000 → 4\u202f500\u00a0F"],
+    ["prestation.prix", "Tresses essai\u00a0: 15\u202f000 → 12\u202f000\u00a0FCFA"],
+    ["produit.prix", "Huile de coco essai\u00a0: 4\u202f000 → 4\u202f500\u00a0FCFA"],
     ["produit.stock", "Huile de coco essai\u00a0: 12 → 8"],
   ]);
 });
@@ -79,5 +79,5 @@ test("un nom très long est raccourci pour que l'ancienne et la nouvelle valeur 
   assert.ok([...line.target].length <= 64);
   assert.ok(line.target.startsWith("Soin visage éclat"));
   assert.ok(line.target.includes("…"));
-  assert.ok(line.target.endsWith("\u00a0: 15\u202f000 → 12\u202f000\u00a0F"), line.target);
+  assert.ok(line.target.endsWith("\u00a0: 15\u202f000 → 12\u202f000\u00a0FCFA"), line.target);
 });

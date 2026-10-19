@@ -25,6 +25,9 @@ export function demanderRemiseAZero(dataDir: string): void {
   writeFileSync(join(dataDir, DEMANDE_REMISE_A_ZERO), "", { mode: 0o600 });
 }
 
+/** Réglages gardés par la remise à zéro (devise du 15/10/2026) : la devise de l'institut et l'affichage de son symbole. */
+const REGLAGES_GARDES = ["institut.devise", "affichage.symbole_position", "affichage.symbole_ecran"] as const;
+
 type Ligne = Record<string, string | number | bigint | null | Uint8Array>;
 
 /** Recopie des lignes dans une table de la base neuve, colonnes telles qu'elles sont lues. */
@@ -45,7 +48,8 @@ function estIllisible(error: unknown): boolean {
  * Au démarrage de la base de formation : si une remise à zéro est demandée,
  * refait la base. Gardés : les quatre comptes de formation (mêmes numéros, mots
  * de passe et codes PIN) et les postes déclarés (les tablettes restent
- * déclarées), sauf en démonstration publique, où aucun poste n'est gardé. Tout le reste repart de zéro (sessions, comptes créés en séance,
+ * déclarées), sauf en démonstration publique, où aucun poste n'est gardé, et la devise de l'institut
+ * avec l'affichage de son symbole (`REGLAGES_GARDES`). Tout le reste repart de zéro (sessions, comptes créés en séance,
  * fiches, rendez-vous, caisse, réglages, journal) ; la démonstration est semée
  * de nouveau par le démarrage, qui rétablit alors les comptes (`retablirComptesFormation` :
  * rôle, fiche liée, nom affiché).
@@ -66,6 +70,7 @@ export function appliquerRemiseAZero(dataDir: string): boolean {
   const temporaire = `${chemin}.remise`;
   let comptes: Ligne[] = [];
   let postes: Ligne[] = [];
+  let reglages: Ligne[] = [];
   // Un fichier vide est une base neuve : rien à garder, rien d'illisible.
   if (existsSync(chemin) && statSync(chemin).size > 0) {
     try {
@@ -76,6 +81,7 @@ export function appliquerRemiseAZero(dataDir: string): boolean {
         comptes = ancienne.prepare(`SELECT * FROM accounts WHERE login IN (${logins.map(() => "?").join(", ")}) ORDER BY id`).all(...logins) as Ligne[];
         // Démonstration publique : aucun poste gardé (ceux des visiteurs, noms compris, repartent avec la nuit).
         postes = estDemoPublique() ? [] : (ancienne.prepare("SELECT * FROM devices ORDER BY id").all() as Ligne[]);
+        reglages = ancienne.prepare(`SELECT * FROM settings WHERE key IN (${REGLAGES_GARDES.map(() => "?").join(", ")}) ORDER BY key`).all(...REGLAGES_GARDES) as Ligne[];
       } finally {
         ancienne.close();
       }
@@ -85,6 +91,7 @@ export function appliquerRemiseAZero(dataDir: string): boolean {
       // Base illisible : refaite sans compte, et le dit (le technicien relance `sudo lama-formation --comptes`).
       comptes = [];
       postes = [];
+      reglages = [];
       console.log(message(langFromEnv(process.env), "formation.remise_illisible"));
     }
   }
@@ -98,6 +105,7 @@ export function appliquerRemiseAZero(dataDir: string): boolean {
     neuve.exec("BEGIN");
     recopier(neuve, "accounts", comptes);
     recopier(neuve, "devices", postes.map((p) => ({ ...p, created_by: null })));
+    recopier(neuve, "settings", reglages.map((r) => ({ ...r, updated_by: null })));
     neuve.exec("COMMIT");
   } catch (error) {
     neuve.close();

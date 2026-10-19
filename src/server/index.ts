@@ -10,17 +10,22 @@ import { clientSummary } from "./crm/synthese.ts";
 import type { Database, StorageBinding } from "./storage.ts";
 import type { Account } from "./auth/accounts.ts";
 import type { Session } from "./auth/sessions.ts";
-import { installAuth, clientIp, currentAccount } from "./auth/middleware.ts";
+import { installAuth, clientIp, currentAccount, porteCookieSession } from "./auth/middleware.ts";
 import { logAudit, MAX_TARGET_LENGTH } from "./audit.ts";
 import type { Context } from "hono";
-import { doualaDay, formatFrancs } from "../shared/caisse.ts";
+import { doualaDay } from "../shared/caisse.ts";
+import { formatMontantDocument, formatNombre } from "../shared/montants.ts";
 import { busyOn, transferNote } from "./transferts.ts";
+import { addMinutes, takeIdentifier } from "./rendez-vous-commun.ts";
 import { installRealtime, publish } from "./realtime.ts";
 import { mountAuthRoutes } from "./auth/routes.ts";
 import { mountDeviceRoutes } from "./auth/devices.ts";
 import { mountAccountRoutes } from "./auth/accounts-routes.ts";
 import { redactAppointment, redactProduct, redactStaff, restrictFields } from "./auth/permissions.ts";
 import { crmActive, mountSettingsRoutes, setMasterKey } from "./settings.ts";
+import { mountDeviseRoutes } from "./devise.ts";
+import { mountHorairesRoutes } from "./horaires-routes.ts";
+import { semaineProblem, type Semaine } from "../shared/horaires.ts";
 import { mountOutboxRoutes } from "./outbox/routes.ts";
 import { mountBackupRoutes } from "./backup/routes.ts";
 import { mountInstitutRoutes } from "./institut/routes.ts";
@@ -28,7 +33,13 @@ import { mountProductImageRoutes } from "./produits/routes.ts";
 import { IMAGE_VERSION_SQL } from "./produits/images.ts";
 import { IMAGE_MAX_BYTES } from "./images.ts";
 import { mountCaisseRoutes } from "./caisse/routes.ts";
+import { mountSupplementRoutes } from "./supplements/routes.ts";
+import { attachSupplements, insertSupplements, parseSupplement, resolveSupplement, supplementTotals, type StoredSupplement } from "./supplements/rendez-vous.ts";
+import { SupplementError } from "./supplements/catalogue.ts";
+import { SUPPLEMENTS_PAR_PRESTATION, SUPPLEMENTS_PAR_RENDEZ_VOUS } from "../shared/supplements.ts";
 import { mountLoyaltyRoutes } from "./crm/fidelite-routes.ts";
+import { mountImportRoutes } from "./import/routes.ts";
+import { IMPORT_MAX_OCTETS } from "../shared/import.ts";
 import { loyaltySummary, readLoyaltySettings } from "./crm/fidelite.ts";
 import { mountClotureRoutes } from "./caisse/cloture-routes.ts";
 import { mountAcompteRoutes } from "./caisse/acompte-routes.ts";
@@ -38,10 +49,13 @@ import { mountPrintRoutes } from "./impression/routes.ts";
 import { mountCampaignRoutes } from "./crm/campagnes-routes.ts";
 import { mountRelanceRoutes } from "./crm/relances-routes.ts";
 import { mountTransferRoutes } from "./transferts-routes.ts";
+import { mountDemandesRoutes } from "./en-ligne/routes.ts";
+import { mountReglagesEnLigneRoutes } from "./en-ligne/routes-reglages.ts";
 import { mountHeureRoutes } from "./heure/routes.ts";
 import { mountFormationRoutes } from "./formation/routes.ts";
 import { installerCoupuresFormation } from "./formation/coupures.ts";
 import { installerProtectionsDemo } from "./formation/protections-demo.ts";
+import { estDemoPublique } from "./formation/mode.ts";
 import type { BackupEnv } from "./backup/routes.ts";
 import type { HorlogeSysteme } from "./heure/horloge.ts";
 import type { renderTicket } from "./caisse/ticket-pdf.ts";
@@ -54,8 +68,9 @@ import { HTTPException } from "hono/http-exception";
 // fabrication du PDF du ticket (§ 5.1) sans corrompre une facture, immuable dès son émission (§ 3.1).
 // `WHATSAPP_FETCH` : jamais posée en production ; les tests y mettent le faux WAHA (sous-projet 7 § 4).
 // `SMS_FETCH` : jamais posée en production ; les essais y mettent la fausse passerelle.
+// `EN_LIGNE_FETCH` : jamais posée en production ; les essais y mettent le relais d'essai en mémoire (réservation en ligne).
 // `HORLOGE` : horloge du système (`timedatectl`), posée par boot.ts ; les essais y mettent une fausse (distribution D-12).
-export type AppBindings = { STORAGE: StorageBinding; MASTER_KEY?: Uint8Array; CLOCK?: () => number; BACKUP?: BackupEnv; RENDER_TICKET?: typeof renderTicket; WHATSAPP_FETCH?: typeof fetch; SMS_FETCH?: typeof fetch; HORLOGE?: HorlogeSysteme };
+export type AppBindings = { STORAGE: StorageBinding; MASTER_KEY?: Uint8Array; CLOCK?: () => number; BACKUP?: BackupEnv; RENDER_TICKET?: typeof renderTicket; WHATSAPP_FETCH?: typeof fetch; SMS_FETCH?: typeof fetch; HORLOGE?: HorlogeSysteme; EN_LIGNE_FETCH?: (url: string, init: RequestInit) => Promise<Response> };
 type Env = { Bindings: AppBindings; Variables: { account: Account | null; session: Session | null; device: { id: number; name: string } | null } };
 
 const APP_INFO = {
@@ -101,10 +116,16 @@ const MAX_BODY_BYTES = 64 * 1024;
 // pour que la route réponde par son refus traduit, 400).
 const IMAGE_BODY_BYTES = IMAGE_MAX_BYTES + 1;
 const IMAGE_UPLOAD = /^\/api\/(institut\/logos\/[^/]+|products\/\d+\/image)$/;
+// Exception : le fichier d'un import (spec du 18/10/2026 § 2.1), 5 Mo au plus, même octet de marge ;
+// seulement pour une requête qui porte un cookie de session (le corps est lu avant l'authentification)
+// et jamais en démonstration publique, qui ne reçoit aucun fichier.
+const IMPORT_BODY_BYTES = IMPORT_MAX_OCTETS + 1;
+const IMPORT_UPLOAD = /^\/api\/import\/[^/]+(\/apercu)?$/;
 app.use("/api/*", async (c, next) => {
   const raw = c.req.raw;
   if (!raw.body) return next();
-  const limit = raw.method === "PUT" && IMAGE_UPLOAD.test(c.req.path) ? IMAGE_BODY_BYTES : MAX_BODY_BYTES;
+  const limit = raw.method === "PUT" && IMAGE_UPLOAD.test(c.req.path) ? IMAGE_BODY_BYTES
+    : raw.method === "POST" && IMPORT_UPLOAD.test(c.req.path) && !estDemoPublique() && porteCookieSession(c) ? IMPORT_BODY_BYTES : MAX_BODY_BYTES;
   const tooLarge = () => c.json({ error: msg(c, "requete.trop_volumineuse") }, 413);
   if (Number(raw.headers.get("content-length")) > limit) return tooLarge();
   const reader = raw.body.getReader();
@@ -143,12 +164,16 @@ mountAuthRoutes(app);
 mountDeviceRoutes(app);
 mountAccountRoutes(app);
 mountSettingsRoutes(app);
+mountHorairesRoutes(app);
+mountDeviseRoutes(app);
 mountOutboxRoutes(app);
 mountBackupRoutes(app);
 mountInstitutRoutes(app);
 mountProductImageRoutes(app);
 mountCaisseRoutes(app);
+mountSupplementRoutes(app);
 mountLoyaltyRoutes(app);
+mountImportRoutes(app);
 mountClotureRoutes(app);
 mountAcompteRoutes(app);
 mountWhatsappRoutes(app);
@@ -157,6 +182,8 @@ mountPrintRoutes(app);
 mountCampaignRoutes(app);
 mountRelanceRoutes(app);
 mountTransferRoutes(app);
+mountDemandesRoutes(app);
+mountReglagesEnLigneRoutes(app);
 mountHeureRoutes(app);
 mountFormationRoutes(app);
 
@@ -181,7 +208,7 @@ const OkSchema = z.object({ ok: z.boolean() }).openapi("Ok");
 const ConflictSchema = z.object({
   error: z.string(),
   conflicts: z.array(z.object({
-    kind: z.enum(["appointment", "blocked"]),
+    kind: z.enum(["appointment", "blocked", "demande"]),
     start_time: z.string(),
     end_time: z.string(),
     label: z.string(),
@@ -237,6 +264,10 @@ const ClientSummarySchema = z.object({
 const VISITS_SQL = `(SELECT MAX(scheduled_date) FROM appointments WHERE client_id = c.id AND status = 'completed') as last_visit,
        (SELECT COUNT(*) FROM appointments WHERE client_id = c.id AND status = 'completed') as visit_count`;
 
+/** Semaine type (spec du 16/10/2026 § 4.1) : forme vérifiée en détail par `semaineProblem`. */
+const SemaineSchema = z.record(z.string(), z.array(z.tuple([z.string(), z.string()]))).openapi("Semaine");
+const OnOff = z.union([z.literal(0), z.literal(1)]);
+
 const StaffSchema = z.object({
   id: z.number().int(),
   name: z.string(),
@@ -247,6 +278,9 @@ const StaffSchema = z.object({
   color: z.string(),
   active: z.number().int(),
   appointment_count: z.number().int().optional(),
+  horaires: SemaineSchema.nullable(),
+  en_ligne: z.number().int(),
+  service_ids: z.array(z.number().int()),
   created_at: z.string(),
 }).openapi("Staff");
 
@@ -262,6 +296,11 @@ const ServiceSchema = z.object({
   description_en: z.string(),
   category_en: z.string(),
   active: z.number().int(),
+  en_ligne: z.number().int(),
+  /** 1 : ne se vend pas seule, seulement en supplément d'une prestation qui l'accepte (spec du 18/10/2026 § 3.1). */
+  supplement_seulement: z.number().int(),
+  /** Suppléments possibles, dans l'ordre réglé par la gérante (`GET /api/services`). */
+  supplements: z.array(z.object({ kind: z.enum(["service", "product"]), ref_id: z.number().int() })).optional(),
   appointment_count: z.number().int().optional(),
   created_at: z.string(),
 }).openapi("Service");
@@ -273,6 +312,30 @@ const AppointmentNoteSchema = z.object({
   created_at: z.string(),
 }).openapi("AppointmentNote");
 
+/** Supplément posé sous une prestation d'un rendez-vous (spec du 18/10/2026 § 3.3) : libellés, prix et minutes figés. */
+const AppointmentSupplementSchema = z.object({
+  id: z.number().int(),
+  appointment_service_id: z.number().int(),
+  kind: z.enum(["service", "product", "libre"]),
+  ref_id: z.number().int().nullable(),
+  label_fr: z.string(),
+  label_en: z.string(),
+  quantity: z.number().int(),
+  price: z.number().int().optional().openapi({ description: "Unit price; absent for a practitioner, except on a custom add-on (kind libre)." }),
+  minutes: z.number().int(),
+  position: z.number().int(),
+}).openapi("AppointmentSupplement");
+
+/** Supplément envoyé : article du catalogue (`kind`, `ref_id`, `quantity` pour un produit) ou supplément libre (`label`, `price`, `minutes`). */
+const SupplementInputSchema = z.object({
+  kind: z.enum(["service", "product", "libre"]),
+  ref_id: z.number().int().nullable().optional(),
+  quantity: z.number().int().optional(),
+  label: z.string().optional(),
+  price: z.number().int().optional(),
+  minutes: z.number().int().optional(),
+});
+
 const AppointmentServiceSchema = z.object({
   id: z.number().int(),
   appointment_id: z.number().int(),
@@ -281,6 +344,7 @@ const AppointmentServiceSchema = z.object({
   service_name_en: z.string().nullable().optional(),
   price: z.number(),
   duration: z.number().int(),
+  supplements: z.array(AppointmentSupplementSchema).optional(),
 }).openapi("AppointmentService");
 
 const AppointmentSchema = z.object({
@@ -348,40 +412,20 @@ const ProductSchema = z.object({
 const NameInput = z.string().trim().min(1);
 const FrancsInput = z.number().int().min(0);
 const CountInput = z.number().int().min(0);
-const MinutesInput = z.number().int().min(5).max(720);
+// Durée d'une prestation : 0 à 720 minutes pour zod ; sous 5 minutes, seulement pour une prestation
+// « supplément seulement » (spec du 18/10/2026 § 3.1), contrôlé par les routes des prestations.
+const DureeInput = z.number().int().min(0).max(720);
+const DUREE_MIN = 5;
 
 const IdParam = z.object({ id: z.string().openapi({ description: "Resource ID" }) });
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-/**
- * Tire le numéro APT suivant (V1-01), dans la transaction qui écrit le
- * rendez-vous : lecture et écriture du compteur sans rien d'intercalé, et un
- * refus qui annule la transaction rend aussi le numéro (aucun trou).
- */
-function takeIdentifier(db: Database): string {
-  const prefix = db.prepare("SELECT value FROM _meta WHERE key = 'appointment_prefix'").get() as { value: string } | undefined;
-  const counter = db.prepare("SELECT value FROM _meta WHERE key = 'appointment_counter'").get() as { value: string } | undefined;
-  const next = parseInt(counter?.value || "0", 10) + 1;
-  // Upsert, pas UPDATE : sans la ligne du compteur, un UPDATE ne toucherait rien et redonnerait toujours le même numéro.
-  db.prepare("INSERT INTO _meta (key, value) VALUES ('appointment_counter', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .run(String(next));
-  return `${prefix?.value || "APT"}-${next}`;
-}
 
 // Forme stricte d'une date (`aaaa-mm-jj`) et d'une heure (`hh:mm`) de rendez-vous : une forme fausse
 // (`05/10/2026`, `9:30`) dérangeait le calcul de l'instant WhatsApp (RangeError, transaction annulée)
 // et le tri des horaires (chaîne non alignée sur deux chiffres).
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_FORMAT = /^\d{2}:\d{2}$/;
-
-function addMinutes(time: string, minutes: number): string {
-  const [h, m] = time.split(":").map(Number);
-  const total = h * 60 + m + minutes;
-  const hh = Math.floor(total / 60) % 24;
-  const mm = total % 60;
-  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-}
 
 /**
  * Facture active qui cite le rendez-vous `a` (sous-projet 5 § 3.4) : le
@@ -420,10 +464,11 @@ async function journal(c: Context, entry: { action: string; target: string }): P
   await logAudit({ accountId: currentAccount(c).id, action: entry.action, target: entry.target, ip: clientIp(c), now: nowOf(c) });
 }
 
-/** Cible d'un changement de valeur : « Tresses\u00a0: 15 000 → 12 000 F » (prix) ou « Huile de coco\u00a0: 12 → 8 » (stock). */
-function changeTarget(name: string, before: number, after: number, unit: "francs" | "stock"): string {
-  const shown = (n: number) => (unit === "francs" ? formatFrancs(n) : String(n));
-  const suffix = `\u00a0: ${shown(before)} → ${shown(after)}${unit === "francs" ? "\u00a0F" : ""}`;
+/** Cible d'un changement de valeur : « Tresses\u00a0: 15 000 → 12 000 FCFA » (prix) ou « Huile de coco\u00a0: 12 → 8 » (stock). */
+function changeTarget(name: string, before: number, after: number, unit: "montant" | "stock"): string {
+  const suffix = unit === "montant"
+    ? `\u00a0: ${formatNombre(before, "fr")} → ${formatMontantDocument(after, "fr")}`
+    : `\u00a0: ${before} → ${after}`;
   // Le journal garde le début de la cible : un nom trop long est raccourci pour que les valeurs survivent.
   const room = MAX_TARGET_LENGTH - [...suffix].length;
   const chars = [...name];
@@ -594,9 +639,10 @@ app.openapi(getCalendar, async (c) => {
     const svcs = await query<Record<string, unknown>>(
       `SELECT aps.*, sv.name as service_name, sv.name_en as service_name_en FROM appointment_services aps
        LEFT JOIN services sv ON sv.id = aps.service_id
-       WHERE aps.appointment_id = ?`,
+       WHERE aps.appointment_id = ? ORDER BY aps.id`,
       [apt.id],
     );
+    await attachSupplements(svcs);
     (apt as Record<string, unknown>).appointment_services = svcs;
   }
 
@@ -642,9 +688,10 @@ app.openapi(getAppointment, async (c) => {
   const svcs = await query<Record<string, unknown>>(
     `SELECT aps.*, sv.name as service_name, sv.name_en as service_name_en FROM appointment_services aps
      LEFT JOIN services sv ON sv.id = aps.service_id
-     WHERE aps.appointment_id = ?`,
+     WHERE aps.appointment_id = ? ORDER BY aps.id`,
     [id],
   );
+  await attachSupplements(svcs);
   apt.appointment_services = svcs;
 
   const notes = await query<Record<string, unknown>>(
@@ -670,6 +717,9 @@ const createAppointment = createRoute({
       is_recurring: z.number().int().optional(),
       recurrence_interval: z.string().optional(),
       service_ids: z.array(z.number().int()).optional(),
+      supplements: z.array(SupplementInputSchema.extend({ service_index: z.number().int().min(0) })).max(SUPPLEMENTS_PAR_RENDEZ_VOUS).optional().openapi({
+        description: "Add-ons under the services of the appointment; service_index is the position of their service in service_ids.",
+      }),
       allow_conflict: z.boolean().optional().openapi({
         description: "Book even though the staff member is already busy then. Salons do deliberately overlap (a colour processes while the next client is cut), so this is allowed, but never by accident.",
       }),
@@ -687,26 +737,48 @@ app.openapi(createAppointment, async (c) => {
   const body = c.req.valid("json");
   const startTime = body.start_time ?? "09:00";
 
-  // Calculate total duration and price from services
+  // Durée et prix des prestations, puis de leurs suppléments (spec du 18/10/2026 § 3.3).
   let totalDuration = 60;
   let totalPrice = 0;
   const serviceIds = body.service_ids || [];
 
   if (serviceIds.length > 0) {
-    const svcs = await query<{ duration: number; price: number }>(
-      `SELECT duration, price FROM services WHERE id IN (${serviceIds.map(() => "?").join(",")})`,
+    const svcs = await query<{ duration: number; price: number; name: string; supplement_seulement: number }>(
+      `SELECT duration, price, name, supplement_seulement FROM services WHERE id IN (${serviceIds.map(() => "?").join(",")})`,
       serviceIds,
     );
+    // « Supplément seulement » : ne se réserve jamais seule (spec § 3.1).
+    const seule = svcs.find((s) => s.supplement_seulement === 1);
+    if (seule) return c.json({ error: msg(c, "rdv.supplement_seul", { nom: seule.name }) }, 400);
     totalDuration = svcs.reduce((sum, s) => sum + s.duration, 0);
     totalPrice = svcs.reduce((sum, s) => sum + s.price, 0);
   }
+
+  // Suppléments résolus d'après le catalogue avant tout calcul de la fin ; un refus n'écrit rien.
+  let resolved: StoredSupplement[][] = serviceIds.map(() => []);
+  try {
+    const inputs = (body.supplements ?? []).map((s) => ({ index: s.service_index, input: parseSupplement(s) }));
+    if (inputs.some((s) => s.index >= serviceIds.length)) return c.json({ error: msg(c, "rdv.prestation_absente") }, 400);
+    resolved = c.env.STORAGE.transaction!((db) => {
+      const out: StoredSupplement[][] = serviceIds.map(() => []);
+      for (const { index, input } of inputs) out[index].push(resolveSupplement(db, serviceIds[index], input));
+      return out;
+    });
+  } catch (error) {
+    if (error instanceof SupplementError) return c.json({ error: localize(c, error.message) }, 400);
+    throw error;
+  }
+  if (resolved.some((list) => list.length > SUPPLEMENTS_PAR_PRESTATION)) return c.json({ error: msg(c, "supplement.trop") }, 400);
+  const extra = supplementTotals(resolved.flat());
+  totalDuration += extra.minutes;
+  totalPrice += extra.price;
 
   // Forme stricte avant tout calcul : une date ou une heure mal formée (`05/10/2026`, `9:30`) ne doit
   // jamais atteindre le calcul de l'instant WhatsApp (RangeError, 500, transaction annulée).
   if (!DATE_FORMAT.test(body.scheduled_date)) return c.json({ error: msg(c, "vente.date") }, 400);
   if (!TIME_FORMAT.test(startTime)) return c.json({ error: msg(c, "rdv.heures_format") }, 400);
 
-  // Grille de l'agenda (décision 6) : début de 07:00 à 21:00 par pas de 5 minutes, fin au plus tard à 21:00.
+  // Grille de l'agenda (décision 6) : début de 07:00 à 23:00 par pas de 5 minutes, fin au plus tard à 23:00.
   const startRefusal = validTime(startTime);
   if (startRefusal) return c.json({ error: msg(c, startRefusal) }, 400);
   const start = toMinutes(startTime)!;
@@ -740,10 +812,12 @@ app.openapi(createAppointment, async (c) => {
     ).run(identifier, body.client_id, body.staff_id ?? null, body.scheduled_date, startTime, endTime, totalPrice,
       body.notes || "", body.is_recurring || 0, body.recurrence_interval || "", now);
     const id = Number(result.lastInsertRowid);
-    for (const svcId of serviceIds) {
+    serviceIds.forEach((svcId, index) => {
       const svc = db.prepare("SELECT duration, price FROM services WHERE id = ?").get(svcId) as { duration: number; price: number } | undefined;
-      if (svc) db.prepare("INSERT INTO appointment_services (appointment_id, service_id, price, duration) VALUES (?, ?, ?, ?)").run(id, svcId, svc.price, svc.duration);
-    }
+      if (!svc) return;
+      const row = db.prepare("INSERT INTO appointment_services (appointment_id, service_id, price, duration) VALUES (?, ?, ?, ?)").run(id, svcId, svc.price, svc.duration);
+      insertSupplements(db, Number(row.lastInsertRowid), resolved[index]);
+    });
     queueAppointmentMessage(db, messages, "confirmation", id, now);
     return { id };
   });
@@ -762,6 +836,14 @@ app.openapi(createAppointment, async (c) => {
     [aptId],
   );
 
+  // Chaque supplément libre posé à la prise du rendez-vous est noté au journal, comme à sa modification (spec § 3.2).
+  for (const libre of resolved.flat().filter((x) => x.kind === "libre")) {
+    await logAudit({
+      accountId: currentAccount(c).id, action: "supplement.libre", ip: clientIp(c), now,
+      target: `${apt!.identifier} · ${formatMontantDocument(libre.price, "fr")} · ${libre.label_fr}`,
+    });
+  }
+
   return c.json({ appointment: redactAppointment(currentAccount(c).role, apt!) }, 201);
 });
 
@@ -778,7 +860,7 @@ const updateAppointment = createRoute({
       scheduled_date: z.string().optional(),
       start_time: z.string().optional(),
       end_time: z.string().optional(),
-      total_price: z.number().optional(),
+      total_price: FrancsInput.optional(),
       notes: z.string().optional(),
       allow_conflict: z.boolean().optional().openapi({
         description: "Move the appointment even though the staff member is already busy then.",
@@ -1277,6 +1359,21 @@ app.openapi(deleteClient, async (c) => {
 
 // ── Staff ─────────────────────────────────────────────────────────
 
+/** Prestations pratiquées, triées, en tableau JSON. */
+const STAFF_SERVICE_IDS = `(SELECT json_group_array(service_id) FROM (SELECT service_id FROM staff_services WHERE staff_id = s.id ORDER BY service_id)) AS service_ids`;
+
+/** Ligne `staff` lue en base vers la forme de l'API : semaine type et prestations décodées. */
+function staffOut<T extends Record<string, unknown>>(row: T): T & { horaires: Semaine | null; service_ids: number[] } {
+  return { ...row, horaires: typeof row.horaires === "string" ? (JSON.parse(row.horaires) as Semaine) : null, service_ids: JSON.parse(String(row.service_ids ?? "[]")) as number[] };
+}
+
+/** Remplace les prestations pratiquées ; les identifiants inconnus sont ignorés. */
+function writeStaffServices(db: Database, staffId: number, ids: number[]): void {
+  db.prepare("DELETE FROM staff_services WHERE staff_id = ?").run(staffId);
+  const add = db.prepare("INSERT OR IGNORE INTO staff_services (staff_id, service_id) SELECT ?, id FROM services WHERE id = ?");
+  for (const id of new Set(ids)) add.run(staffId, id);
+}
+
 const listStaff = createRoute({
   method: "get",
   path: "/api/staff",
@@ -1290,11 +1387,11 @@ const listStaff = createRoute({
 
 app.openapi(listStaff, async (c) => {
   const staff = await query<Record<string, unknown>>(
-    `SELECT s.*, (SELECT COUNT(*) FROM appointments WHERE staff_id = s.id) as appointment_count
+    `SELECT s.*, (SELECT COUNT(*) FROM appointments WHERE staff_id = s.id) as appointment_count, ${STAFF_SERVICE_IDS}
      FROM staff s ORDER BY s.name ASC`,
   );
   const account = currentAccount(c);
-  return c.json({ staff: staff.map((s) => redactStaff(account, s)) }, 200);
+  return c.json({ staff: staff.map((s) => redactStaff(account, staffOut(s))) }, 200);
 });
 
 const getAllStaff = createRoute({
@@ -1303,14 +1400,14 @@ const getAllStaff = createRoute({
   responses: {
     200: {
       description: "All staff for lookup",
-      content: { "application/json": { schema: z.object({ staff: z.array(z.object({ id: z.number().int(), name: z.string(), color: z.string() })) }) } },
+      content: { "application/json": { schema: z.object({ staff: z.array(z.object({ id: z.number().int(), name: z.string(), color: z.string(), horaires: SemaineSchema.nullable(), service_ids: z.array(z.number().int()) })) }) } },
     },
   },
 });
 
 app.openapi(getAllStaff, async (c) => {
-  const staff = await query<{ id: number; name: string; color: string }>("SELECT id, name, color FROM staff WHERE active = 1 ORDER BY name ASC");
-  return c.json({ staff }, 200);
+  const staff = await query<Record<string, unknown>>(`SELECT s.id, s.name, s.color, s.horaires, ${STAFF_SERVICE_IDS} FROM staff s WHERE s.active = 1 ORDER BY s.name ASC`);
+  return c.json({ staff: staff.map(staffOut) } as never, 200);
 });
 
 const createStaff = createRoute({
@@ -1324,19 +1421,31 @@ const createStaff = createRoute({
       title: z.string().optional(),
       title_en: z.string().optional().openapi({ description: "English role, optional; the French title is shown when empty." }),
       color: z.string().optional(),
+      horaires: SemaineSchema.nullable().optional(),
+      en_ligne: OnOff.optional(),
+      service_ids: z.array(z.number().int()).max(500).optional(),
     }) } } },
   },
-  responses: { 201: { description: "Created", content: { "application/json": { schema: z.object({ staff: StaffSchema }) } } } },
+  responses: {
+    201: { description: "Created", content: { "application/json": { schema: z.object({ staff: StaffSchema }) } } },
+    400: { description: "Invalid hours", content: { "application/json": { schema: ErrorSchema } } },
+  },
 });
 
 app.openapi(createStaff, async (c) => {
   const body = c.req.valid("json");
-  const result = await run(
-    "INSERT INTO staff (name, email, phone, title, title_en, color) VALUES (?, ?, ?, ?, ?, ?)",
-    [body.name, body.email || "", body.phone || "", body.title || "", body.title_en || "", body.color || "#7c3aed"],
-  );
-  const staff = await get<Record<string, unknown>>("SELECT * FROM staff WHERE id = ?", [result.lastInsertRowid]);
-  return c.json({ staff }, 201);
+  if (body.horaires && semaineProblem(body.horaires)) return c.json({ error: msg(c, "reglage.horaires") }, 400);
+  const id = c.env.STORAGE.transaction!((db) => {
+    const created = db.prepare("INSERT INTO staff (name, email, phone, title, title_en, color, horaires, en_ligne) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+      body.name, body.email || "", body.phone || "", body.title || "", body.title_en || "", body.color || "#7c3aed",
+      body.horaires ? JSON.stringify(body.horaires) : null, body.en_ligne ?? 0,
+    );
+    const staffId = Number(created.lastInsertRowid);
+    if (body.service_ids) writeStaffServices(db, staffId, body.service_ids);
+    return staffId;
+  });
+  const staff = await get<Record<string, unknown>>(`SELECT s.*, ${STAFF_SERVICE_IDS} FROM staff s WHERE s.id = ?`, [id]);
+  return c.json({ staff: staffOut(staff!) } as never, 201);
 });
 
 const updateStaff = createRoute({
@@ -1352,22 +1461,31 @@ const updateStaff = createRoute({
       title_en: z.string().optional(),
       color: z.string().optional(),
       active: z.number().int().optional(),
+      horaires: SemaineSchema.nullable().optional(),
+      en_ligne: OnOff.optional(),
+      service_ids: z.array(z.number().int()).max(500).optional(),
     }) } } },
   },
-  responses: { 200: { description: "Updated", content: { "application/json": { schema: OkSchema } } } },
+  responses: {
+    200: { description: "Updated", content: { "application/json": { schema: OkSchema } } },
+    400: { description: "Invalid hours", content: { "application/json": { schema: ErrorSchema } } },
+  },
 });
 
 app.openapi(updateStaff, async (c) => {
   const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
+  const { horaires, service_ids, ...body } = c.req.valid("json");
+  if (horaires && semaineProblem(horaires)) return c.json({ error: msg(c, "reglage.horaires") }, 400);
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, val] of Object.entries(body)) {
     if (val !== undefined) { sets.push(`${key} = ?`); params.push(val); }
   }
-  if (sets.length > 0) {
-    await run(`UPDATE staff SET ${sets.join(", ")} WHERE id = ?`, [...params, id]);
-  }
+  if (horaires !== undefined) { sets.push("horaires = ?"); params.push(horaires === null ? null : JSON.stringify(horaires)); }
+  c.env.STORAGE.transaction!((db) => {
+    if (sets.length > 0) db.prepare(`UPDATE staff SET ${sets.join(", ")} WHERE id = ?`).run(...(params as (string | number | null)[]), Number(id));
+    if (service_ids) writeStaffServices(db, Number(id), service_ids);
+  });
   return c.json({ ok: true }, 200);
 });
 
@@ -1417,6 +1535,11 @@ app.openapi(listServices, async (c) => {
     `SELECT s.*, (SELECT COUNT(*) FROM appointment_services WHERE service_id = s.id) as appointment_count
      FROM services s ORDER BY s.category ASC, s.name ASC`,
   );
+  // Suppléments possibles (spec du 18/10/2026 § 3.1), dans l'ordre réglé : une seule lecture pour tout le catalogue.
+  const refs = await query<{ service_id: number; kind: "service" | "product"; ref_id: number }>(
+    "SELECT service_id, kind, ref_id FROM service_supplements ORDER BY service_id, position",
+  );
+  for (const s of services) s.supplements = refs.filter((r) => r.service_id === s.id).map(({ kind, ref_id }) => ({ kind, ref_id }));
   return c.json({ services }, 200);
 });
 
@@ -1427,24 +1550,32 @@ const createService = createRoute({
     body: { content: { "application/json": { schema: z.object({
       name: NameInput,
       description: z.string().optional(),
-      duration: MinutesInput.optional(),
+      duration: DureeInput.optional(),
       price: FrancsInput.optional(),
       color: z.string().optional(),
       category: z.string().optional(),
       name_en: z.string().optional().openapi({ description: "English name, optional; the French name is shown when empty." }),
       description_en: z.string().optional(),
       category_en: z.string().optional(),
+      en_ligne: OnOff.optional(),
+      supplement_seulement: OnOff.optional(),
     }) } } },
   },
-  responses: { 201: { description: "Created", content: { "application/json": { schema: z.object({ service: ServiceSchema }) } } } },
+  responses: {
+    201: { description: "Created", content: { "application/json": { schema: z.object({ service: ServiceSchema }) } } },
+    400: { description: "Invalid duration", content: { "application/json": { schema: ErrorSchema } } },
+  },
 });
 
 app.openapi(createService, async (c) => {
   const body = c.req.valid("json");
+  const seulement = body.supplement_seulement ?? 0;
+  const duration = body.duration ?? 60;
+  if (seulement === 0 && duration < DUREE_MIN) return c.json({ error: msg(c, "requete.invalide", { champ: "duration" }) }, 400);
   const result = await run(
-    "INSERT INTO services (name, description, duration, price, color, category, name_en, description_en, category_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [body.name, body.description || "", body.duration || 60, body.price || 0, body.color || "#6b7280", body.category || "",
-      body.name_en || "", body.description_en || "", body.category_en || ""],
+    "INSERT INTO services (name, description, duration, price, color, category, name_en, description_en, category_en, en_ligne, supplement_seulement) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [body.name, body.description || "", duration, body.price || 0, body.color || "#6b7280", body.category || "",
+      body.name_en || "", body.description_en || "", body.category_en || "", seulement === 1 ? 0 : body.en_ligne ?? 0, seulement],
   );
   const service = await get<Record<string, unknown>>("SELECT * FROM services WHERE id = ?", [result.lastInsertRowid]);
   return c.json({ service }, 201);
@@ -1458,7 +1589,7 @@ const updateService = createRoute({
     body: { content: { "application/json": { schema: z.object({
       name: NameInput.optional(),
       description: z.string().optional(),
-      duration: MinutesInput.optional(),
+      duration: DureeInput.optional(),
       price: FrancsInput.optional(),
       color: z.string().optional(),
       category: z.string().optional(),
@@ -1466,26 +1597,46 @@ const updateService = createRoute({
       name_en: z.string().optional(),
       description_en: z.string().optional(),
       category_en: z.string().optional(),
+      en_ligne: OnOff.optional(),
+      supplement_seulement: OnOff.optional(),
     }) } } },
   },
-  responses: { 200: { description: "Updated", content: { "application/json": { schema: OkSchema } } } },
+  responses: {
+    200: { description: "Updated", content: { "application/json": { schema: OkSchema } } },
+    400: { description: "Invalid duration", content: { "application/json": { schema: ErrorSchema } } },
+    409: { description: "Add-on only refused while the service has add-ons", content: { "application/json": { schema: ErrorSchema } } },
+  },
 });
 
 app.openapi(updateService, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
+  const before = await get<{ name: string; price: number; duration: number; supplement_seulement: number }>(
+    "SELECT name, price, duration, supplement_seulement FROM services WHERE id = ?",
+    [id],
+  );
+  if (before) {
+    const seulement = body.supplement_seulement ?? before.supplement_seulement;
+    const duration = body.duration ?? before.duration;
+    if (seulement === 0 && duration < DUREE_MIN) return c.json({ error: msg(c, "requete.invalide", { champ: "duration" }) }, 400);
+    // Une prestation « supplément seulement » n'a pas de liste : la case ne se coche pas tant qu'elle en garde une.
+    if (seulement === 1 && before.supplement_seulement === 0 && await exists("SELECT COUNT(*) as count FROM service_supplements WHERE service_id = ?", id)) {
+      return c.json({ error: msg(c, "supplement.seulement_liste") }, 409);
+    }
+    // « Supplément seulement » : jamais publiée en ligne (spec § 3.1), même si la case « en ligne » arrive cochée.
+    if (seulement === 1) body.en_ligne = 0;
+  }
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, val] of Object.entries(body)) {
     if (val !== undefined) { sets.push(`${key} = ?`); params.push(val); }
   }
-  const before = await get<{ name: string; price: number }>("SELECT name, price FROM services WHERE id = ?", [id]);
   if (sets.length > 0) {
     await run(`UPDATE services SET ${sets.join(", ")} WHERE id = ?`, [...params, id]);
   }
   // Changement de prix seulement (décision 2) : les autres modifications ne vont pas au journal.
   if (before && body.price !== undefined && body.price !== before.price) {
-    await journal(c, { action: "prestation.prix", target: changeTarget(body.name ?? before.name, before.price, body.price, "francs") });
+    await journal(c, { action: "prestation.prix", target: changeTarget(body.name ?? before.name, before.price, body.price, "montant") });
   }
   return c.json({ ok: true }, 200);
 });
@@ -1718,7 +1869,7 @@ app.openapi(updateProduct, async (c) => {
   if (before) {
     const name = typeof body.name === "string" ? body.name : before.name;
     if (typeof body.price === "number" && body.price !== before.price) {
-      await journal(c, { action: "produit.prix", target: changeTarget(name, before.price, body.price, "francs") });
+      await journal(c, { action: "produit.prix", target: changeTarget(name, before.price, body.price, "montant") });
     }
     if (typeof body.stock === "number" && body.stock !== before.stock) {
       await journal(c, { action: "produit.stock", target: changeTarget(name, before.stock, body.stock, "stock") });

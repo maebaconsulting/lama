@@ -6,8 +6,8 @@
 
 /** Première heure de la journée (graduation de l'agenda). */
 export const DAY_START_HOUR = 7;
-/** Fin de la journée : la dernière graduation est 20:00, la journée se termine à 21:00. */
-export const DAY_END_HOUR = 21;
+/** Fin de la journée : la dernière graduation est 22:00, la journée se termine à 23:00. */
+export const DAY_END_HOUR = 23;
 /** Pas des créneaux, en minutes. */
 export const SLOT_MINUTES = 15;
 
@@ -18,8 +18,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const label = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 
 /**
- * Créneaux de 15 minutes sur 24 h : début de 07:00 à 20:45, fin de 07:15 à
- * 21:00. Une valeur existante hors grille ou hors bornes (09:10, 22:00) est
+ * Créneaux de 15 minutes sur 24 h : début de 07:00 à 22:45, fin de 07:15 à
+ * 23:00. Une valeur existante hors grille ou hors bornes (09:10, 23:30) est
  * insérée à sa place pour ne jamais être perdue.
  */
 export function timeSlots(borne: Borne, current = ""): string[] {

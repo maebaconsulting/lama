@@ -16,6 +16,7 @@ import { useConfirmation } from "../auth/confirmation";
 import { useMarque } from "../../marque-context";
 import { Bloc, Case, Rubrique } from "./elements";
 import { PrefixeFactures } from "./prefixe-factures";
+import { DeviseInstitut } from "./devise-institut";
 import { useAuth } from "../../auth-context";
 import { EtatChargement, EtatErreur } from "../comptoir";
 
@@ -39,7 +40,7 @@ function CaisseAdministrateur() {
   return (
     <Rubrique titre={t("reglages.rubrique.caisse")} description={t("reglages_caisse.description_administrateur")}>
       {data
-        ? <PrefixeFactures setting={data.settings.find((s) => s.key === "caisse.prefixe")} onSaved={reload} />
+        ? <><PrefixeFactures setting={data.settings.find((s) => s.key === "caisse.prefixe")} onSaved={reload} /><DeviseInstitut settings={data.settings} onSaved={reload} /></>
         : error ? <EtatErreur message={error} onRetry={() => void reload()} /> : <EtatChargement />}
     </Rubrique>
   );
@@ -143,6 +144,7 @@ function CaisseGerante() {
           </div>
         </Bloc>
         <PrefixeFactures setting={data?.settings.find((s) => s.key === "caisse.prefixe")} onSaved={reload} />
+        <DeviseInstitut settings={data?.settings ?? []} onSaved={reload} />
         <Bloc titre={t("reglages_caisse.tva")}>
           <Case id="caisse-tva-active" label={t("reglages_caisse.tva_active")} checked={form["caisse.tva_active"] === "oui"} onChange={flag("caisse.tva_active")} />
           <div className="max-w-40">

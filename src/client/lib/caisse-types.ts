@@ -53,8 +53,9 @@ export interface Deposit {
 
 export interface InvoiceLine {
   id: number;
-  kind: "service" | "product";
-  ref_id: number;
+  kind: "service" | "product" | "libre";
+  /** Article du catalogue ; `null` pour un supplément libre. */
+  ref_id: number | null;
   label_fr: string;
   label_en: string;
   quantity: number;
@@ -68,6 +69,8 @@ export interface InvoiceLine {
   credited_line_id: number | null;
   /** Produit remis en stock (ligne d'un avoir) : 1 ou 0. */
   restock: number;
+  /** Ligne de la prestation dont cette ligne est un supplément (spec du 18/10/2026 § 3.5). */
+  parent_line_id?: number | null;
 }
 
 export interface InvoicePayment {

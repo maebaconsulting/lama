@@ -228,7 +228,7 @@ type HeureProps = {
   /** Valeur de l'API `hh:mm`, ou vide. */
   value: string;
   onValue: (value: string) => void;
-  /** Début d'un horaire (07:00 à 20:45) ou fin (07:15 à 21:00). */
+  /** Début d'un horaire (07:00 à 22:45) ou fin (07:15 à 23:00). */
   borne?: Borne;
   className?: string;
   required?: boolean;

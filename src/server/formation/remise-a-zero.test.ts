@@ -284,3 +284,27 @@ test("démarrage de la démonstration publique après une remise : journal propr
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+test("remise à zéro : la devise et l'affichage du symbole sont gardés, les autres réglages repartent de zéro", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lama-remise-devise-"));
+  baseUsee(dir);
+  const avant = openDatabase(join(dir, "lama.db"));
+  const ecrire = avant.prepare("INSERT INTO settings (key, value, secret, updated_at, updated_by) VALUES (?, ?, 0, 0, 2)");
+  ecrire.run("institut.devise", '"EUR"');
+  ecrire.run("affichage.symbole_position", '"avant"');
+  ecrire.run("affichage.symbole_ecran", "false");
+  avant.close();
+  demanderRemiseAZero(dir);
+  assert.equal(appliquerRemiseAZero(dir), true);
+  const db = openDatabase(join(dir, "lama.db"));
+  try {
+    assert.deepEqual(db.prepare("SELECT key, value, updated_by FROM settings ORDER BY key").all().map((r) => ({ ...r })), [
+      { key: "affichage.symbole_ecran", value: "false", updated_by: null },
+      { key: "affichage.symbole_position", value: '"avant"', updated_by: null },
+      { key: "institut.devise", value: '"EUR"', updated_by: null },
+    ], "« institut.nom » de la base usée n'est pas gardé");
+  } finally {
+    db.close();
+  }
+  rmSync(dir, { recursive: true, force: true });
+});

@@ -10,7 +10,7 @@ L'application, elle, suit la langue de chaque compte : chacun la choisit avec l
 
 ## Installer
 
-1. Installer Ubuntu Server 24.04 sur le mini-PC (compte de maintenance au choix, SSH activé). Le brancher au routeur par câble.
+1. Installer Ubuntu Server 24.04, ou Ubuntu 24.04 ou 26.04 en version bureau, sur le mini-PC (compte de maintenance au choix, SSH activé : sur la version bureau, `sudo apt install openssh-server`). Le brancher au routeur par câble. Sur la version bureau, l'installation coupe la mise en veille.
 2. Sur le poste de développement, fabriquer l'archive avec `pnpm paquet`, puis la copier sur le serveur (`scp paquets/lama-….tar.gz technicien@adresse:`).
 3. Sur le serveur, dans un terminal (une session SSH interactive convient) :
 
@@ -20,10 +20,17 @@ cd lama-*/
 sudo ./deploy/installer.sh
 ```
 
+Au lancement, le script propose deux modes :
+
+- **Automatique** (`sudo ./deploy/installer.sh --auto`) : réglages par défaut, aucune question. Fuseau Africa/Douala, WhatsApp installé, mise en veille coupée sur Ubuntu bureau, disque de sauvegarde pris seulement s'il est déjà préparé, base de formation et Google Drive laissés pour plus tard.
+- **Assistée** (`sudo ./deploy/installer.sh --assiste`) : une question à chaque choix (langue, fuseau horaire, heure exacte, mise en veille, préparation d'un disque USB neuf, WhatsApp, base de formation, Google Drive). La réponse par défaut est entre crochets ; Entrée seule la prend.
+
+Dans les deux modes, l'installation s'arrête sur les clés de secours et attend OUI.
+
 L'installation doit se lancer dans un vrai terminal : le script refuse de continuer sinon, car les clés de secours (voir plus bas) ne s'affichent qu'à l'écran, une seule fois.
 
 4. Le script installe d'abord les paquets du système (Node 24, age, rclone, avahi, openssl, polkit, systemd-timesyncd) et crée le compte de service `lama`. Il affiche ensuite les clés de secours et attend la confirmation OUI avant d'écrire quoi que ce soit sur le disque : ce n'est qu'après cette confirmation qu'il installe le programme dans `/opt/lama`, fabrique le certificat HTTPS pour `lama.local` et l'adresse IP actuelle du serveur (voir « Certificat HTTPS »), prépare le disque de sauvegarde s'il est branché, puis installe et démarre les services. L'horloge du serveur doit être juste avant de lancer l'installation : vérifier avec `date`, corriger au besoin avec `sudo timedatectl set-time 'AAAA-MM-JJ HH:MM:SS'`.
-5. Depuis un appareil du Wi-Fi, ouvrir http://lama.local/certificat, approuver le certificat, puis ouvrir https://lama.local : l'écran d'installation crée le compte administrateur. Se connecter, puis créer le compte de la gérante dans Réglages, Équipe et comptes. La gérante saisit ensuite le nom de l'institut dans Réglages, Institut : il figure en tête des tickets et des clôtures (laissé vide, il n'est pas imprimé).
+5. Depuis un appareil du Wi-Fi, ouvrir http://lama.local/certificat, approuver le certificat, puis ouvrir https://lama.local : l'écran d'installation crée le compte administrateur et choisit la devise ; elle reste modifiable dans Réglages, Caisse, rubrique Devise, jusqu'à la première vente. Se connecter, puis créer le compte de la gérante dans Réglages, Équipe et comptes. La gérante saisit ensuite le nom de l'institut dans Réglages, Institut : il figure en tête des tickets et des clôtures (laissé vide, il n'est pas imprimé).
 
 Le script peut être relancé sans risque avec la même version, depuis une archive fraîchement extraite ailleurs que dans `/opt/lama` : il garde les données, les clés et les réglages déjà en place, et n'affiche pas de nouvelles clés. Avec une archive d'une autre version, il refuse et renvoie vers `mettre-a-jour.sh` (voir « Mettre à jour »), qui sauvegarde d'abord et revient en arrière en cas d'échec. Il refuse aussi de se relancer depuis `/opt/lama` lui-même ; copier l'archive ailleurs avant de relancer.
 
@@ -147,6 +154,8 @@ sudo systemctl disable --now lama-formation   # arrêter la formation, ses donn�
 ```
 
 Si l'écran de connexion de la formation affiche « Aucun compte de formation », les comptes n'ont pas été créés : lancer `sudo lama-formation --comptes`.
+
+La formation prend la devise de la vraie base (avec la position et l'affichage de son symbole) : `--installer` et `--comptes` la lisent sous le compte `lama`, sans rien y écrire, et la démonstration est semée dans cette devise. Une base de formation qui a déjà des ventes garde la sienne.
 
 La remise à zéro se fait aussi dans l'application : compte `formation.admin`, Réglages, Formation, « Remettre la formation à zéro » (case à cocher, puis mot de passe redemandé). Elle s'applique au redémarrage du service, que systemd relance de lui-même ; chacun se reconnecte. Les quatre comptes de formation sont rétablis (rôle, fiche, nom) et les postes déclarés sont gardés ; tout le reste, comptes créés en séance compris (rendez-vous, ventes, fiches, réglages), est effacé et la démonstration « Institut Démo » revient, avec six mois d'historique. Si la commande annonce qu'aucun compte n'a été gardé, lancer `sudo lama-formation --comptes`. `mettre-a-jour.sh` relance la formation sur la nouvelle version ; elle n'a ni sauvegarde ni clé de secours, ses données sont fictives.
 

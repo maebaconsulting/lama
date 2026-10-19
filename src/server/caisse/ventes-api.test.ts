@@ -40,7 +40,7 @@ test("vente de comptoir sans rendez-vous : facture complète, stock déduit, jou
   assert.equal(inv.tip, null);
   assert.equal((await g("GET", `/api/products/${product}`)).body.product.stock, 2);
   const journal = ctx.db.prepare("SELECT action, target FROM audit_log WHERE action LIKE 'facture.%'").all().map((row) => ({ ...row }));
-  assert.deepEqual(journal, [{ action: "facture.emise", target: "FAC-2026-000001 (35\u202f000\u00a0F)" }], "mineur 3 : montant groupé comme à l'écran");
+  assert.deepEqual(journal, [{ action: "facture.emise", target: "FAC-2026-000001 (35\u202f000\u00a0FCFA)" }], "mineur 3 : montant groupé comme à l'écran");
   assert.equal(resourceFor("/api/sales"), "invoices");
 });
 
@@ -150,7 +150,7 @@ test("remise au-delà du plafond : mot de passe d'une gérante demandé à la r�
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   const managerId = (ctx.db.prepare("SELECT id FROM accounts WHERE login = 'manager'").get() as { id: number }).id;
   const plafond = ctx.db.prepare("SELECT account_id, target FROM audit_log WHERE action = 'facture.remise_plafond'").get();
-  assert.deepEqual({ ...plafond }, { account_id: managerId, target: "FAC-2026-000001 (5\u202f000\u00a0F)" }, "mineur 3 : montant groupé comme à l'écran");
+  assert.deepEqual({ ...plafond }, { account_id: managerId, target: "FAC-2026-000001 (5\u202f000\u00a0FCFA)" }, "mineur 3 : montant groupé comme à l'écran");
   assert.deepEqual([auditAction("facture.remise_plafond", "fr"), auditAction("facture.emise", "en")], ["Remise au-delà du plafond approuvée", "Invoice issued"]);
 
   const own = await g("POST", "/api/sales", { ...body, request_id: "remise-plafond-2" });
@@ -182,7 +182,7 @@ test("retouche C : remise de 100 % approuvée, vente à 0 F émise sans versemen
     "facture à 0 F, aucun versement",
   );
   const journal = ctx.db.prepare("SELECT target FROM audit_log WHERE action = 'facture.emise'").all().map((row) => (row as { target: string }).target);
-  assert.ok(journal.includes("FAC-2026-000001 (0\u00a0F)"), "montant à 0 F au journal, groupé comme les autres (mineur 3)");
+  assert.ok(journal.includes("FAC-2026-000001 (0\u00a0FCFA)"), "montant à 0 F au journal, groupé comme les autres (mineur 3)");
 
   // Un versement non nul sur cette même vente à 0 F reste refusé (versements différents du dû), comme aujourd'hui.
   const paye = await r("POST", "/api/sales", {

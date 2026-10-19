@@ -18,7 +18,7 @@ test("marque.ecran : « logo_nom » par défaut, lu sans session dans l'état pu
   }
   const state = (await anon("GET", "/api/auth/state")).body;
   assert.deepEqual(state.marque, { ecran: "logo", nom: "Institut Akwa", logos: { clair: null, sombre: null } });
-  assert.deepEqual(Object.keys(state).sort(), ["account", "crm", "demo", "device", "formation", "installed", "marque", "session"]);
+  assert.deepEqual(Object.keys(state).sort(), ["account", "crm", "demo", "device", "devise", "formation", "installed", "marque", "session"]);
   assert.equal(state.crm, null, "interrupteur du mini CRM : seulement une fois connecté");
   assert.doesNotMatch(JSON.stringify(state), /699/, "aucun autre réglage dans l'état public (le nom de l'institut et les versions des logos s'y ajoutent en vague B)");
 });

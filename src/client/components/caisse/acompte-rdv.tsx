@@ -15,8 +15,9 @@ import {
 } from "@/lib/acompte";
 import { aroundAmount, methodLabel } from "@/lib/caisse-texte";
 import type { Deposit, SaleSettings } from "@/lib/caisse-types";
-import { formatAmount, formatPrice } from "@/lib/format";
+import { formatPrice, modeSaisieMontant } from "@/lib/format";
 import { typeAmount } from "@/lib/saisie-montant";
+import { ChampMontant } from "./champ-montant";
 import { newRequestId } from "@/lib/ticket";
 import { depositSource } from "@/lib/ticket-pdf";
 import type { Appointment } from "../../types";
@@ -152,12 +153,12 @@ export function AcompteRdv({ apt }: { apt: Appointment }) {
           <p className="text-sm text-muted-foreground">{t("acompte.aide")}</p>
           <div className="space-y-1">
             <Label htmlFor="acompte-montant">{t("acompte.montant")}</Label>
-            <Input
+            <ChampMontant
               id="acompte-montant"
-              inputMode="numeric"
+              inputMode={modeSaisieMontant()}
               className="chiffres-tabulaires h-12 text-right text-lg"
-              value={draft.amount ? formatAmount(draft.amount, lang) : ""}
-              onInput={(e: Event) => setDraft(setDepositAmount(draft, typeAmount(e, draft.amount, lang)))}
+              amount={draft.amount}
+              onInput={(e: Event, avant: string) => setDraft(setDepositAmount(draft, typeAmount(e, draft.amount, lang, avant)))}
             />
             {apt.total_price != null && <p className="text-xs text-muted-foreground">{t("acompte.plafond_aide", { montant: formatPrice(apt.total_price, lang) })}</p>}
           </div>
@@ -173,13 +174,14 @@ export function AcompteRdv({ apt }: { apt: Appointment }) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor={`acompte-verse-${i}`}>{t("acompte.montant_verse")}</Label>
-                  <Input
+                  <ChampMontant
                     id={`acompte-verse-${i}`}
-                    inputMode="numeric"
+                    inputMode={modeSaisieMontant()}
                     className="chiffres-tabulaires text-right"
                     disabled={!several}
-                    value={several ? (p.amount ? formatAmount(p.amount, lang) : "") : formatAmount(draft.amount, lang)}
-                    onInput={(e: Event) => setDraft(setDepositPayment(draft, i, { amount: typeAmount(e, p.amount, lang) }))}
+                    amount={several ? p.amount : draft.amount}
+                    blankZero={several}
+                    onInput={(e: Event, avant: string) => setDraft(setDepositPayment(draft, i, { amount: typeAmount(e, p.amount, lang, avant) }))}
                   />
                 </div>
                 <div className="space-y-1">

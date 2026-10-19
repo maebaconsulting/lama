@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toMinutes, validTime, DAY_OPEN, DAY_CLOSE, overlaps, findConflicts, describeConflicts, type Busy } from "./scheduling.ts";
+import { toMinutes, validTime, DAY_OPEN, DAY_CLOSE, CLOSE_TIME, overlaps, findConflicts, describeConflicts, type Busy } from "./scheduling.ts";
 
 const appt = (start_time: string, end_time: string, label = "Jamie Rivera"): Busy =>
   ({ kind: "appointment", start_time, end_time, label });
@@ -98,10 +98,20 @@ test("describeConflicts en français sur demande, jeton allow_conflict intact (s
   assert.equal(describeConflicts("Alex", [appt("10:00", "11:00")]), "Alex is already booked at 10:00-11:00 (Jamie Rivera). Choose another time or staff member, or send allow_conflict: true to book over it anyway.");
 });
 
-test("validTime : hh:mm de 07:00 à 21:00, minutes multiples de 5 (décision 6 de la passe V 1.0)", () => {
+test("validTime : hh:mm de 07:00 à 23:00, minutes multiples de 5 (grille élargie, spec du 18/10/2026 § 9.4)", () => {
   assert.equal(DAY_OPEN, 7 * 60);
-  assert.equal(DAY_CLOSE, 21 * 60);
-  for (const time of ["07:00", "09:05", "12:30", "20:55", "21:00"]) assert.equal(validTime(time), null, time);
+  assert.equal(DAY_CLOSE, 23 * 60);
+  assert.equal(CLOSE_TIME, "23:00");
+  for (const time of ["07:00", "09:05", "12:30", "21:30", "22:55", "23:00"]) assert.equal(validTime(time), null, time);
   for (const time of ["25:70", "9:30", "", "noon", "09:30garbage", "24:00"]) assert.equal(validTime(time), "rdv.heures_format", time);
-  for (const time of ["06:30", "06:55", "21:05", "21:30", "23:30", "09:07"]) assert.equal(validTime(time), "rdv.heures_plage", time);
+  for (const time of ["06:30", "06:55", "23:05", "23:30", "09:07"]) assert.equal(validTime(time), "rdv.heures_plage", time);
+});
+
+test("une demande en ligne à confirmer est nommée comme telle dans le refus", () => {
+  const demande: Busy = { kind: "demande", start_time: "10:00", end_time: "11:00", label: "Mireille Ngo" };
+  assert.equal(
+    describeConflicts("Awa", [demande], "book", "fr"),
+    "Awa a déjà un rendez-vous à 10:00-11:00 (demande en ligne de Mireille Ngo). Choisissez un autre horaire ou un autre membre de l'équipe, ou envoyez allow_conflict: true pour réserver malgré tout.",
+  );
+  assert.match(describeConflicts("Awa", [demande], "book", "en"), /\(online request from Mireille Ngo\)/);
 });

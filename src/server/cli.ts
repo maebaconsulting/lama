@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { initDB, run } from "@clawnify/db";
 import { loadMasterKey, loadRecipient, readConfig } from "./boot.ts";
 import { logAudit } from "./audit.ts";
@@ -8,9 +9,15 @@ import { runMigrations } from "./migrations.ts";
 import { decryptBackup, prepareRestore, runBackup, writeRestoreNote } from "./backup/backup.ts";
 import { openDatabase, sqliteStorage } from "./storage.ts";
 import { decode, langFromEnv, message, MessageError } from "./messages.ts";
+import { analyserCatalogue, CatalogueRefuse, COLONNES_CATALOGUE, deviseDeLaBase, importerCatalogue, lireCatalogueTableau, type BilanImport, type ErreurLigne } from "./catalogue/import-catalogue.ts";
+import { decoderFichier, lireTableau } from "./import/csv.ts";
+import { retirerExemples } from "./import/modeles.ts";
+import { estCodeDevise } from "../shared/devises.ts";
+import { verifierRelais } from "./en-ligne/verifier-relais.ts";
 import { ensureSeeded } from "./seed.ts";
 import { ecrireComptesFormation } from "./formation/comptes.ts";
 import { garderContreVraieBase } from "./formation/mode.ts";
+import { ecrireDeviseFormation, lireOptionsDevise, optionsDevise } from "./formation/devise-formation.ts";
 
 const lang = langFromEnv(process.env);
 
@@ -73,7 +80,21 @@ async function main(argv: string[]) {
     console.log(message(lang, "cli.waha_cle"));
     return 0;
   }
-  if (command === "formation-comptes" && args.length === 0) {
+  if (command === "lire-devise" && args.length === 0) {
+    // Devise de la base de ce compte, en options de formation-comptes (une par ligne) : lue par
+    // lama-formation --comptes sous le compte de lama. Lecture seule, jamais de migration ni d'écriture.
+    const chemin = join(config.dataDir, "lama.db");
+    if (!existsSync(chemin)) return 0;
+    const db = new DatabaseSync(chemin, { readOnly: true });
+    try {
+      const options = lireOptionsDevise(db);
+      if (options.length) console.log(options.join("\n"));
+    } finally {
+      db.close();
+    }
+    return 0;
+  }
+  if (command === "formation-comptes") {
     // Base de formation seulement (D-16) : jamais de comptes semés ainsi dans la vraie base.
     if (!config.formation) {
       console.error(message(lang, "cli.formation_seulement"));
@@ -81,6 +102,8 @@ async function main(argv: string[]) {
     }
     // Même garde qu'au démarrage du serveur : jamais les dossiers de la vraie base, quoi que dise l'environnement.
     garderContreVraieBase(config.dataDir, config.configDir, lang);
+    // Devise de la vraie base (--devise, --position, --symbole-ecran), validée avant toute écriture ; sans option, XAF.
+    const reglages = optionsDevise(args);
     // Quatre lignes lues sur l'entrée standard : jamais dans la liste des processus ni dans l'historique du terminal.
     const lignes = readFileSync(0, "utf8").split("\n").map((l) => l.replace(/\r$/, ""));
     const motsDePasse = lignes.slice(0, 4);
@@ -92,11 +115,98 @@ async function main(argv: string[]) {
       const storage = sqliteStorage(db);
       initDB({ STORAGE: storage });
       setMasterKey(loadMasterKey(config.configDir, config.dev));
+      // Devise écrite avant tout semis : fiches de démonstration et historique dans cette devise.
+      const gardee = await ecrireDeviseFormation(storage, reglages, Date.now());
+      if (gardee) console.log(message(lang, "cli.formation_devise_gardee", { gardee, demandee: reglages.devise ?? "" }));
       // Fiches de la démonstration d'abord (la praticienne est reliée à la fiche n° 1), puis l'historique, qui attend une gérante.
       await ensureSeeded(storage, Date.now());
       const logins = await ecrireComptesFormation(motsDePasse, lang, Date.now());
       await ensureSeeded(storage, Date.now());
       console.log(message(lang, "cli.formation_comptes", { comptes: logins.join(", ") }));
+    } finally {
+      db.close();
+    }
+    return 0;
+  }
+  if (command === "verifier-relais" && args.length === 2) {
+    // Sorties : 0 conforme, 1 clé absente ou invalide, 2 non conforme, 3 adresse invalide.
+    const [adresse, institut] = args;
+    let url: URL | null = null;
+    try {
+      url = new URL(adresse);
+    } catch {
+      url = null;
+    }
+    if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) {
+      console.error(message(lang, "cli.verifier_adresse"));
+      return 3;
+    }
+    // Outil du contrat de réservation en ligne : clé lue sur l'entrée standard, jamais dans la liste des processus.
+    if (process.stdin.isTTY) console.error(message(lang, "cli.verifier_invite"));
+    const cle = readFileSync(0, "utf8").trim();
+    if (!/^[0-9a-f]{64}$/.test(cle)) {
+      console.error(message(lang, "cli.verifier_cle"));
+      return 1;
+    }
+    const resultat = await verifierRelais({
+      adresse, institut, cle, lang,
+      journal: (p) => console.log(p.ok
+        ? message(lang, "cli.verifier_point_ok", { nom: p.nom })
+        : message(lang, "cli.verifier_point_echec", { nom: p.nom, detail: p.detail ?? "" })),
+    });
+    console.log(resultat.ok ? message(lang, "cli.verifier_ok", { n: resultat.points.length }) : message(lang, "cli.verifier_echec"));
+    return resultat.ok ? 0 : 2;
+  }
+  if (command === "importer-catalogue" && (args.length === 1 || (args.length === 2 && args[1] === "--desactiver-absentes"))) {
+    // Sorties : 0 chargé, 1 fichier illisible ou refusé (rien n'est écrit), 2 devise de la base autre que celle du fichier.
+    const [fichier, option] = args;
+    if (!existsSync(fichier)) {
+      console.error(message(lang, "cli.catalogue_fichier", { fichier }));
+      return 1;
+    }
+    const texte = decoderFichier(readFileSync(fichier));
+    if (texte === null) {
+      console.error(message(lang, "import.encodage"));
+      return 1;
+    }
+    // Erreur de fichier (en-tête, guillemets, vide, trop de lignes) : imprimée seule, son message porte déjà ce qu'il faut.
+    const lecture = lireTableau(texte, COLONNES_CATALOGUE);
+    if (!lecture.ok) {
+      console.error(message(lang, lecture.erreur.motif, lecture.erreur.valeurs));
+      return 1;
+    }
+    const catalogue = lireCatalogueTableau(retirerExemples("catalogue", lecture.tableau, ""));
+    const { lignes, erreurs, devise: deviseFichier } = catalogue;
+    const desactiverAbsentes = option === "--desactiver-absentes";
+    const chemin = join(config.dataDir, "lama.db");
+    const refuser = (refus: ErreurLigne[]) => {
+      for (const e of refus) console.error(message(lang, "cli.catalogue_ligne", { ligne: e.ligne, motif: message(lang, e.motif, e.valeurs) }));
+      console.error(message(lang, "cli.catalogue_refuse", { n: refus.length }));
+      return 1;
+    };
+    // Fichier fautif sans base : refusé sans la créer. Avec une base, l'aperçu montre aussi les refus des suppléments, en une passe.
+    if (erreurs.length && !existsSync(chemin)) return refuser(erreurs);
+    const db = openDatabase(chemin);
+    try {
+      runMigrations(db);
+      if (erreurs.length) return refuser(analyserCatalogue(db, catalogue, { base: deviseFichier, desactiverAbsentes }).refusees);
+      const devise = deviseDeLaBase(db);
+      if (!estCodeDevise(devise) || devise !== deviseFichier) {
+        console.error(message(lang, "cli.catalogue_devise", { devise, fichier: deviseFichier }));
+        return 2;
+      }
+      let bilan: BilanImport;
+      try {
+        bilan = importerCatalogue(db, lignes, { desactiverAbsentes, devise: deviseFichier });
+      } catch (erreur) {
+        // Durée (case de la base) ou suppléments possibles refusés : la transaction est annulée, rien n'est écrit.
+        if (erreur instanceof CatalogueRefuse) return refuser(erreur.refus);
+        throw erreur;
+      }
+      initDB({ STORAGE: sqliteStorage(db) });
+      const cible = message("fr", "cli.catalogue_bilan", { lignes: lignes.length, ajoutees: bilan.ajoutees, mises: bilan.misesAJour, desactivees: bilan.desactivees });
+      await logAudit({ accountId: null, action: "catalogue.import", target: `${basename(fichier)}\u00a0: ${cible}`, now: Date.now() });
+      console.log(message(lang, "cli.catalogue_bilan", { lignes: lignes.length, ajoutees: bilan.ajoutees, mises: bilan.misesAJour, desactivees: bilan.desactivees }));
     } finally {
       db.close();
     }

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { canClose, differenceOf, documentGroups, movedMethods, parseCounted, shiftDay, signedPrice } from "./caisse-jour.ts";
 import type { CashDay, ClosingSummary } from "./caisse-types.ts";
 import { closingSource, invoiceSource } from "./ticket-pdf.ts";
+import { definirDevise } from "../../shared/devise-active.ts";
 
 /**
  * « Caisse du jour » (sous-projet 5 § 6.3), règles sans navigateur : jours
@@ -40,6 +41,24 @@ test("espèces comptées : vide, zéro, milliers séparés, texte illisible", ()
   assert.equal(parseCounted("34 500"), 34500);
   assert.equal(parseCounted("34.500"), 34500);
   assert.equal(parseCounted("abc"), null);
+});
+
+test("espèces comptées : un zéro écrit avec décimales est un zéro saisi, en XAF comme en EUR", () => {
+  assert.equal(parseCounted("0,00"), 0);
+  assert.equal(parseCounted("000"), 0);
+  definirDevise({ code: "EUR", position: null, symboleEcran: true });
+  try {
+    assert.equal(parseCounted("0,00"), 0);
+    assert.equal(parseCounted("0.00"), 0);
+    assert.equal(parseCounted("0,0"), 0);
+    assert.equal(parseCounted("0"), 0);
+    assert.equal(parseCounted("12,50"), 1250);
+    assert.equal(parseCounted(""), null);
+    assert.equal(parseCounted(","), null);
+    assert.equal(parseCounted("abc"), null);
+  } finally {
+    definirDevise({ code: "XAF", position: null, symboleEcran: true });
+  }
 });
 
 test("écart : juste, de plus, de moins", () => {

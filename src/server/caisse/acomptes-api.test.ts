@@ -53,7 +53,7 @@ test("acompte par l'API : désactivé par défaut, encaissé, rejoué, reçu PDF
   assert.equal(String(pdf.body).slice(0, 5), "%PDF-");
 
   const journal = ctx.db.prepare("SELECT action, target FROM audit_log WHERE action LIKE 'acompte.%' ORDER BY id").all().map((row) => ({ ...row }));
-  assert.deepEqual(journal, [{ action: "acompte.encaisse", target: "AC-2026-000001 (10\u202f000\u00a0F)" }]);
+  assert.deepEqual(journal, [{ action: "acompte.encaisse", target: "AC-2026-000001 (10\u202f000\u00a0FCFA)" }]);
   assert.deepEqual([auditAction("acompte.encaisse", "fr"), auditAction("acompte.rembourse", "en"), auditAction("acompte.garde", "fr")], ["Acompte encaissé", "Deposit refunded", "Acompte gardé"]);
   assert.equal(resourceFor("/api/deposits"), "invoices");
 
@@ -167,7 +167,7 @@ test("« Garder » un acompte : motif obligatoire, statut kept, journal", async 
   const kept = await g("POST", `/api/deposits/${dep.id}/settle`, { request_id: "garde-api-02", action: "keep", reason: "Annulation tardive" });
   assert.equal(kept.status, 201, JSON.stringify(kept.body));
   assert.deepEqual([kept.body.deposit.status, kept.body.deposit.settle_reason], ["kept", "Annulation tardive"]);
-  assert.deepEqual(ctx.db.prepare("SELECT action, target FROM audit_log WHERE action = 'acompte.garde'").all().map((row) => ({ ...row })), [{ action: "acompte.garde", target: `${dep.number} (3\u202f000\u00a0F)` }]);
+  assert.deepEqual(ctx.db.prepare("SELECT action, target FROM audit_log WHERE action = 'acompte.garde'").all().map((row) => ({ ...row })), [{ action: "acompte.garde", target: `${dep.number} (3\u202f000\u00a0FCFA)` }]);
 });
 
 /** Le sort (ici « Rembourser ») se règle aussi quand la cliente a été marquée absente. */

@@ -24,8 +24,8 @@ export function railFolded(panelOpen: boolean, panelInColumn: boolean): boolean 
   return panelOpen && !panelInColumn;
 }
 
-/** Rubriques de navigation (la page /charte et l'écran « Vente » restent hors menu). */
-export type NavView = Exclude<View, "charte" | "vente">;
+/** Rubriques de navigation (la page /charte, l'écran « Vente » et l'écran « Demandes en ligne » restent hors menu). */
+export type NavView = Exclude<View, "charte" | "vente" | "demandes">;
 
 const VIEW_KEYS: Record<Exclude<NavView, "dashboard">, Key> = {
   calendar: "menu.agenda",

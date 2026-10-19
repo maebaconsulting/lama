@@ -24,7 +24,7 @@ test("réglages de la fidélité : défauts de la spec, gérante seule, valeurs 
   const bad = await g("PUT", "/api/settings/fidelite.paliers", { value: [{ points: 250, montant: 15000 }, { points: 100, montant: 5000 }] }, FR);
   assert.deepEqual([bad.status, bad.body.error], [400, "Chaque palier demande plus de points que le précédent."]);
   const tranche = await g("PUT", "/api/settings/fidelite.tranche", { value: 50 }, FR);
-  assert.deepEqual([tranche.status, tranche.body.error], [400, "Tranche attendue\u00a0: nombre entier de francs, de 100 à 1\u00a0000\u00a0000."]);
+  assert.deepEqual([tranche.status, tranche.body.error], [400, "Tranche attendue\u00a0: de 100\u00a0F à 1\u202f000\u202f000\u00a0F."]);
   assert.equal((await g("PUT", "/api/settings/fidelite.points", { value: 101 })).status, 400);
   assert.equal((await g("PUT", "/api/settings/fidelite.paliers", { value: [] })).status, 400);
   assert.equal((await g("PUT", "/api/settings/fidelite.active", { value: "oui" })).status, 400);

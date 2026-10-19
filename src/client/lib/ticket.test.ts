@@ -3,9 +3,10 @@ import { test } from "node:test";
 import type { Invoice } from "./caisse-types.ts";
 import type { Appointment, Product, Service } from "../types.ts";
 import {
-  addItem, defaultTipStaff, emptyTicket, fromAppointment, isEmpty, itemCount, keepIssued, keepPending, keepTicket, keptIssued, keptPending, keptTicket,
-  needsClient, newRequestId, openFor, priceTicket, quantityOf, removeLine, saleBody, setClient, setDiscount, setLineStaff, setQuantity, setTip,
+  addItem, addSupplement, defaultTipStaff, emptyTicket, fromAppointment, isEmpty, itemCount, keepIssued, keepPending, keepTicket, keptIssued, keptPending, keptTicket,
+  needsClient, newRequestId, openFor, priceTicket, quantityOf, removeLine, removeSupplement, saleBody, setClient, setDiscount, setLineStaff, setQuantity, setSupplementQuantity, setTip,
 } from "./ticket.ts";
+import type { Ticket } from "./ticket.ts";
 
 /** Ticket de l'écran « Vente » (sous-projet 5 § 4.1), vérifié en exécution. */
 
@@ -141,4 +142,112 @@ test("un enregistrement par compte (relecture 3 de la tâche 6, spec § 7) : la 
 
   // et 508 retrouve aussi le sien : chaque compte a son propre enregistrement.
   assert.equal(keptPending(508), true, "gel de 508 intact malgré la lecture de 507 juste avant");
+});
+
+const AVEC_SUPPLEMENTS = {
+  services: [...CATALOG.services, service(2, 5000, { name: "Mèches", supplement_seulement: 1 })],
+  products: CATALOG.products,
+};
+
+test("ticket depuis un rendez-vous : chaque supplément sous sa prestation, le libre avec son libellé et son prix", () => {
+  const apt = {
+    id: 9, client_id: 4, staff_id: 3,
+    appointment_services: [{ id: 20, appointment_id: 9, service_id: 1, price: 25000, duration: 60, supplements: [
+      { id: 1, appointment_service_id: 20, kind: "service", ref_id: 2, label_fr: "Mèches", label_en: "", quantity: 1, price: 5000, minutes: 30, position: 0 },
+      { id: 2, appointment_service_id: 20, kind: "product", ref_id: 7, label_fr: "Crème", label_en: "", quantity: 2, price: 35000, minutes: 0, position: 1 },
+      { id: 3, appointment_service_id: 20, kind: "libre", ref_id: null, label_fr: "Perles dorées", label_en: "", quantity: 1, price: 3000, minutes: 15, position: 2 },
+    ] }],
+  } as unknown as Appointment;
+  const t = fromAppointment(apt, "v-essai-supp");
+  assert.deepEqual(t.lines, [{ kind: "service", ref_id: 1, quantity: 1, staff_id: 3, supplements: [
+    { kind: "service", ref_id: 2, quantity: 1 },
+    { kind: "product", ref_id: 7, quantity: 2 },
+    { kind: "libre", ref_id: null, quantity: 1, label: "Perles dorées", price: 3000 },
+  ] }]);
+  assert.equal(itemCount(t), 5);
+  assert.equal(quantityOf(t, 7), 2, "un produit en supplément compte dans le stock pris");
+  const priced = priceTicket(t, AVEC_SUPPLEMENTS, VAT, "fr");
+  assert.equal(priced.totals.subtotal, 25000 + 5000 + 70000 + 3000, "prix du catalogue chargé, le libre au prix saisi");
+  assert.deepEqual(priced.lines[0].supplements.map((s) => [s.label, s.line_total]), [["Mèches", 5000], ["Crème 7", 70000], ["Perles dorées", 3000]]);
+  assert.deepEqual(saleBody(t).lines, [
+    { kind: "service", ref_id: 1, quantity: 1, staff_id: 3 },
+    { kind: "service", ref_id: 2, quantity: 1, staff_id: 3, parent: 0 },
+    { kind: "product", ref_id: 7, quantity: 2, staff_id: 3, parent: 0 },
+    { kind: "libre", label: "Perles dorées", unit_price: 3000, quantity: 1, staff_id: 3, parent: 0 },
+  ]);
+});
+
+test("produit retiré du catalogue : le supplément est « manquant » et bloque l'encaissement jusqu'à ce qu'on l'enlève", () => {
+  let t = addItem(emptyTicket("v-essai-supp2"), { kind: "service", ref_id: 1, staff_id: 3 });
+  t = addSupplement(t, 0, { kind: "product", ref_id: 99, quantity: 1 });
+  assert.equal(priceTicket(t, AVEC_SUPPLEMENTS, VAT, "fr").missing, true);
+  t = removeSupplement(t, 0, 0);
+  assert.equal(priceTicket(t, AVEC_SUPPLEMENTS, VAT, "fr").missing, false);
+});
+
+test("« + Supplément » : une prestation une fois, un produit qui s'additionne sans dépasser le stock ; retirer la prestation retire ses suppléments", () => {
+  let t = addItem(emptyTicket("v-essai-supp3"), { kind: "service", ref_id: 1, staff_id: 3 });
+  t = addItem(t, { kind: "product", ref_id: 7, stock: 2 });
+  t = addSupplement(t, 0, { kind: "service", ref_id: 2, quantity: 1 });
+  t = addSupplement(t, 0, { kind: "service", ref_id: 2, quantity: 1 });
+  t = addSupplement(t, 0, { kind: "product", ref_id: 7, quantity: 1 }, 2);
+  t = addSupplement(t, 0, { kind: "product", ref_id: 7, quantity: 1 }, 2);
+  assert.deepEqual(t.lines[0].supplements, [{ kind: "service", ref_id: 2, quantity: 1 }, { kind: "product", ref_id: 7, quantity: 1 }], "stock de 2 : une au ticket, une en supplément");
+  assert.equal(addSupplement(t, 1, { kind: "libre", ref_id: null, quantity: 1, label: "Perles", price: 0 }), t, "jamais sous un produit");
+  assert.equal(setSupplementQuantity(t, 0, 1, 5, 2).lines[0].supplements![1].quantity, 1, "plafonné au stock restant");
+  assert.equal(setSupplementQuantity(t, 0, 1, 0).lines[0].supplements!.length, 1, "à zéro, le supplément part");
+  assert.deepEqual(removeLine(t, 0).lines.map((l) => l.kind), ["product"]);
+});
+
+test("un produit à la fois ligne seule et supplément : le + de la ligne compte les deux dans le plafond du stock", () => {
+  let t = addItem(emptyTicket("v-essai-supp4"), { kind: "service", ref_id: 1, staff_id: 3 });
+  t = addItem(t, { kind: "product", ref_id: 7, stock: 3 });
+  t = addSupplement(t, 0, { kind: "product", ref_id: 7, quantity: 2 }, 3);
+  assert.equal(quantityOf(t, 7), 3);
+  assert.equal(setQuantity(t, 1, 2, 3).lines[1].quantity, 1, "stock de 3, 2 en supplément : la ligne seule reste à 1");
+  assert.equal(setQuantity(t, 1, 0, 3).lines.length, 1, "à zéro, la ligne part");
+});
+
+test("plafond du stock : ajout d'un supplément plafonné, rien d'ajouté sans stock, quantité jamais forcée à 1 au-delà du stock", () => {
+  let t = addItem(emptyTicket("v-essai-supp5"), { kind: "service", ref_id: 1, staff_id: 3 });
+  t = addItem(t, { kind: "product", ref_id: 7, stock: 3 });
+  const plein = addSupplement(t, 0, { kind: "product", ref_id: 7, quantity: 9 }, 3);
+  assert.equal(plein.lines[0].supplements![0].quantity, 2, "9 demandés, 2 disponibles : plafonné à 2");
+  assert.deepEqual(addSupplement(plein, 0, { kind: "product", ref_id: 7, quantity: 1 }, 3), plein, "plus rien de disponible : rien n'est ajouté");
+  const base = (line: number, supp: number): Ticket => ({
+    ...emptyTicket("v-essai-supp6"),
+    lines: [
+      { kind: "service", ref_id: 1, quantity: 1, staff_id: 3, supplements: [{ kind: "product", ref_id: 7, quantity: supp }] },
+      { kind: "product", ref_id: 7, quantity: line, staff_id: null },
+    ],
+  });
+  const a = base(1, 2);
+  assert.equal(setQuantity(a, 1, 2, 2), a, "stock de 2 pris par le supplément et la ligne seule : la ligne n'est pas forcée à 1 de plus");
+  const b = base(2, 1);
+  assert.equal(setSupplementQuantity(b, 0, 0, 3, 2), b, "stock de 2 pris par la ligne seule et le supplément : le supplément ne bouge pas");
+});
+
+test("supplément libre : le prix arrondi et borné est le même à l'écran et dans la vente envoyée", () => {
+  const t = addSupplement(addItem(emptyTicket("v-essai-supp7"), { kind: "service", ref_id: 1, staff_id: 3 }), 0, { kind: "libre", ref_id: null, quantity: 1, label: "Perles", price: 1500.6 });
+  const priced = priceTicket(t, CATALOG, { active: false, rate: 0 }, "fr");
+  const sent = saleBody(t).lines[1] as { unit_price: number };
+  assert.equal(priced.lines[0].supplements[0].unit_price, 1501);
+  assert.equal(sent.unit_price, 1501);
+  const neg = addSupplement(addItem(emptyTicket("v-essai-supp8"), { kind: "service", ref_id: 1 }), 0, { kind: "libre", ref_id: null, quantity: 1, label: "X", price: -5 });
+  assert.equal((saleBody(neg).lines[1] as { unit_price: number }).unit_price, 0);
+});
+
+test("une réduction passe toujours, même stock baissé sous la quantité ; un prix libre NaN vaut 0", () => {
+  const t: Ticket = {
+    ...emptyTicket("v-essai-supp9"),
+    lines: [
+      { kind: "service", ref_id: 1, quantity: 1, staff_id: 3, supplements: [{ kind: "product", ref_id: 7, quantity: 3 }] },
+      { kind: "product", ref_id: 7, quantity: 4, staff_id: null },
+    ],
+  };
+  assert.equal(setQuantity(t, 1, 3, 2).lines[1].quantity, 3, "stock baissé à 2 : le − de la ligne seule fonctionne");
+  assert.equal(setSupplementQuantity(t, 0, 0, 2, 2).lines[0].supplements![0].quantity, 2, "idem pour le supplément");
+  const nan = addSupplement(addItem(emptyTicket("v-essai-supp10"), { kind: "service", ref_id: 1 }), 0, { kind: "libre", ref_id: null, quantity: 1, label: "X", price: NaN });
+  assert.equal((saleBody(nan).lines[1] as { unit_price: number }).unit_price, 0);
+  assert.equal(priceTicket(nan, CATALOG, { active: false, rate: 0 }, "fr").lines[0].supplements[0].unit_price, 0);
 });

@@ -167,6 +167,33 @@ test("praticienne avec l'encaissement actif : imprime la facture de son rendez-v
   assert.equal((await p("POST", "/api/print/documents", { kind: "credit", id: note.id })).status, 404, "avoir");
 });
 
+test("ticket de clôture : imprimé dans la langue de l'écran, chaque fois un original, rien n'est compté ; praticienne et clôture absente, 404", async (t) => {
+  const { ctx, fake, g } = await withPrinter(t);
+  await g("PUT", "/api/settings/caisse.imprimante", { value: fake.address });
+  await g("PUT", "/api/settings/caisse.encaissement_praticienne", { value: true });
+  await documents(g);
+  const r = await ctx.as("reception");
+  const day = (await r("GET", "/api/cash/day")).body.day as string;
+  const closed = await r("POST", "/api/cash/closings", { request_id: "cloture-imprimee-01", day, cash_counted: 0 });
+  assert.equal(closed.status, 201, JSON.stringify(closed.body));
+  const id = closed.body.closing.id as number;
+  assert.deepEqual((await r("POST", "/api/print/documents", { kind: "closing", id }, { "Accept-Language": "fr" })).body, { ok: true, duplicate: false });
+  assert.deepEqual((await g("POST", "/api/print/documents", { kind: "closing", id }, { "Accept-Language": "en" })).body, { ok: true, duplicate: false }, "réimpression : un original");
+  const jobs = await received(fake);
+  assert.equal(jobs.length, 2);
+  assert.match(jobs[0], /CLÔTURE DE CAISSE\n/);
+  assert.match(jobs[1], /TILL CLOSING\n/);
+  assert.doesNotMatch(jobs.join(""), /DUPLICATA|DUPLICATE/);
+  assert.equal(ctx.db.prepare("SELECT COUNT(*) AS n FROM print_counts").get()!.n, 0);
+  assert.equal(ctx.db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'impression.duplicata'").get()!.n, 0);
+  const p = await ctx.as("practitioner");
+  assert.equal((await p("POST", "/api/print/documents", { kind: "closing", id })).status, 404, "praticienne, même avec l'encaissement actif");
+  const absent = await r("POST", "/api/print/documents", { kind: "closing", id: 999 }, { "Accept-Language": "fr" });
+  assert.equal(absent.status, 404);
+  assert.equal(absent.body.error, "Clôture introuvable.");
+  assert.equal((await received(fake)).length, 2, "rien d'autre n'est parti vers l'imprimante");
+});
+
 // Logo sur le ticket papier (vague B) : `GS v 0` dans les octets reçus.
 const hasRaster = (job: Buffer) => job.indexOf(Buffer.from([0x1d, 0x76, 0x30])) >= 0;
 const BIN = { "content-type": "application/octet-stream" };

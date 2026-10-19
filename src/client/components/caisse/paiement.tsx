@@ -12,13 +12,14 @@ import { aroundAmount, blockerText, changeText, discountLabel, methodLabel } fro
 import type { Invoice, SaleSettings } from "@/lib/caisse-types";
 import { formatAmount, formatPrice } from "@/lib/format";
 import {
-  blocker, cashSuggestions, chooseMethod, PAD_KEYS, padAction, paymentsBody, pressKey, removeEntry, setReference, setTendered, settlementOf, startPayment, type KeyPlace, type PaymentDraft,
+  blocker, cashSuggestions, chooseMethod, padAction, padKeys, paymentsBody, pressKey, removeEntry, saisiePave, setReference, setTendered, settlementOf, startPayment, type KeyPlace, type PaymentDraft,
 } from "@/lib/paiement";
 import { lostSaleVerdict, saleLookupPath, type LostSaleVerdict } from "@/lib/reprise-vente";
 import { saleBody, type Ticket } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 import { canSeeManual } from "@/lib/roles";
 import { ticketChoice } from "@/lib/whatsapp";
+import { separateurDecimal } from "../../../shared/montants";
 import { PAYMENT_METHODS, REFERENCE_REQUIRED, type Totals } from "../../../shared/caisse";
 import { useConfirmation } from "../auth/confirmation";
 import { Montant } from "../comptoir";
@@ -330,7 +331,7 @@ export function Paiement({ ticket, totals, settings, clientName, onBack, onIssue
           <div className="order-6 space-y-2 px-4 pt-3 @2xl:p-0">
             <p id="caisse-saisie" className="etiquette sr-only text-encre-grise @2xl:not-sr-only">{libelleSaisie}</p>
             <output aria-labelledby="caisse-saisie" className="flex min-h-16 items-center justify-end rounded-sm border border-foreground px-4 font-serif text-4xl">
-              <span className="chiffres">{formatAmount(current.amount, lang)}</span>
+              <span className="chiffres">{saisiePave(current, lang)}</span>
             </output>
           </div>
         )}
@@ -371,16 +372,17 @@ export function Paiement({ ticket, totals, settings, clientName, onBack, onIssue
         )}
         {due > 0 && (
           <div className="order-8 grid grid-cols-3 gap-1.5 px-4 pt-2 @2xl:gap-2 @2xl:p-0">
-            {PAD_KEYS.map((k) => (
+            {padKeys().map((k) => (
               <Button
                 key={k}
                 type="button"
                 variant="outline"
                 data-pave
+                aria-label={k === "virgule" ? t("caisse.touche_virgule") : undefined}
                 className={cn("h-16 border-filet px-1", k === "effacer" ? "text-sm" : "font-serif text-3xl")}
                 onClick={() => setDraft(pressKey(draft, k, due))}
               >
-                {k === "effacer" ? t("caisse.effacer") : k}
+                {k === "effacer" ? t("caisse.effacer") : k === "virgule" ? separateurDecimal(lang) : k}
               </Button>
             ))}
           </div>

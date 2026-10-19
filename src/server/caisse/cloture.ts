@@ -11,7 +11,8 @@
  */
 import type { Database } from "../storage.ts";
 import { message, type Lang, type MessageKey } from "../messages.ts";
-import { CLOSING_WINDOW_DAYS, PAYMENT_METHODS, dayBounds, doualaDay, formatFrancsDocument, type PaymentMethod } from "../../shared/caisse.ts";
+import { CLOSING_WINDOW_DAYS, PAYMENT_METHODS, dayBounds, doualaDay, type PaymentMethod } from "../../shared/caisse.ts";
+import { formatMontantDocument } from "../../shared/montants.ts";
 import { calendarDate, methodText, printable, ticketTime, type TicketRow, type TicketStyle } from "./ticket.ts";
 import { SaleError } from "./vente.ts";
 import { marquerFormation } from "../formation/marque.ts";
@@ -282,14 +283,15 @@ export function closeTill(db: Database, req: ClosingRequest, ctx: { now: number;
 }
 
 /** Montant signé du ticket : « −15 000 FCFA » ; `plus` : « +15 000 FCFA » pour un écart positif. */
-function signed(amount: number, plus = false): string {
-  if (amount < 0) return `\u2212${formatFrancsDocument(-amount)}`;
-  return plus && amount > 0 ? `+${formatFrancsDocument(amount)}` : formatFrancsDocument(amount);
+function signed(amount: number, lang: Lang, plus = false): string {
+  if (amount < 0) return `\u2212${formatMontantDocument(-amount, lang)}`;
+  return plus && amount > 0 ? `+${formatMontantDocument(amount, lang)}` : formatMontantDocument(amount, lang);
 }
 
 /** Ticket de clôture de 80 mm : institut, période, personne, documents, net par moyen, espèces, écart, note, pourboires dus, signature de lama. */
 export function closingRows(closing: ClosingRecord, identity: { nom?: unknown; adresse?: unknown; marque_documents?: unknown }, lang: Lang, options: { logo?: boolean } = {}): TicketRow[] {
   const t = (key: MessageKey, values?: Record<string, string | number>) => message(lang, key, values);
+  const money = (n: number) => formatMontantDocument(n, lang);
   const rows: TicketRow[] = [];
   const text = (value: string, style: TicketStyle, align: "left" | "center" = "left") => {
     if (value.trim()) rows.push({ type: "text", text: value, style, align });
@@ -316,26 +318,26 @@ export function closingRows(closing: ClosingRecord, identity: { nom?: unknown; a
   if (closing.account_name) text(t("ticket.cloture_par", { nom: closing.account_name }), "detail", "center");
   if (closing.closed_at >= end) text(t("ticket.cloturee_le", { date: calendarDate(doualaDay(closing.closed_at)), heure: ticketTime(closing.closed_at) }), "detail", "center");
   rows.push({ type: "rule" });
-  pair(plural(s.invoices.count, "ticket.factures_une", "ticket.factures"), formatFrancsDocument(s.invoices.total));
-  pair(plural(s.credit_notes.count, "ticket.avoirs_un", "ticket.avoirs"), s.credit_notes.total > 0 ? signed(-s.credit_notes.total) : formatFrancsDocument(0));
+  pair(plural(s.invoices.count, "ticket.factures_une", "ticket.factures"), money(s.invoices.total));
+  pair(plural(s.credit_notes.count, "ticket.avoirs_un", "ticket.avoirs"), s.credit_notes.total > 0 ? signed(-s.credit_notes.total, lang) : money(0));
   // Acomptes (vague 3b) : seulement s'il y en a eu, leurs versements sont déjà dans les moyens ci-dessous.
   const dep = s.deposits;
-  if (dep.received.count > 0) pair(plural(dep.received.count, "ticket.acomptes_un", "ticket.acomptes"), formatFrancsDocument(dep.received.total));
-  if (dep.refunded.count > 0) pair(plural(dep.refunded.count, "ticket.acomptes_rembourses_un", "ticket.acomptes_rembourses"), signed(-dep.refunded.total));
+  if (dep.received.count > 0) pair(plural(dep.received.count, "ticket.acomptes_un", "ticket.acomptes"), money(dep.received.total));
+  if (dep.refunded.count > 0) pair(plural(dep.refunded.count, "ticket.acomptes_rembourses_un", "ticket.acomptes_rembourses"), signed(-dep.refunded.total, lang));
   rows.push({ type: "rule" });
   for (const m of s.methods.filter((x) => x.received > 0 || x.refunded > 0)) {
-    pair(methodText(m.method, lang), signed(m.net));
-    if (m.refunded > 0) text(t("ticket.recu_rembourse", { recu: formatFrancsDocument(m.received), rembourse: formatFrancsDocument(m.refunded) }), "detail");
+    pair(methodText(m.method, lang), signed(m.net, lang));
+    if (m.refunded > 0) text(t("ticket.recu_rembourse", { recu: money(m.received), rembourse: money(m.refunded) }), "detail");
   }
   rows.push({ type: "rule" });
-  pair(t("ticket.especes_attendues"), signed(closing.cash_expected));
-  pair(t("ticket.especes_comptees"), formatFrancsDocument(closing.cash_counted));
-  pair(t("ticket.ecart"), signed(closing.difference, true), "total");
+  pair(t("ticket.especes_attendues"), signed(closing.cash_expected, lang));
+  pair(t("ticket.especes_comptees"), money(closing.cash_counted));
+  pair(t("ticket.ecart"), signed(closing.difference, lang, true), "total");
   if (closing.note) text(t("ticket.note", { note: closing.note }), "detail");
   if (s.tips.length) {
     rows.push({ type: "rule" });
     text(t("ticket.pourboires_dus"), "detail");
-    for (const tip of s.tips) pair(tip.staff_name, formatFrancsDocument(tip.amount));
+    for (const tip of s.tips) pair(tip.staff_name, money(tip.amount));
   }
   rows.push({ type: "rule" });
   if (logoAlone) text(name, "mention", "center");

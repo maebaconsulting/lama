@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { setupApp } from "./test-support.ts";
+import { bundleOf, setupApp } from "./test-support.ts";
 import { serieHistorique } from "./neutralite-empreintes.ts";
 import { doualaDay } from "../shared/caisse.ts";
 
@@ -169,4 +169,16 @@ test("démonstration sur une installation neuve qui a déjà vendu en FAC, sans 
   assert.equal(count(ctx, "SELECT COUNT(*) AS n FROM institut_logos"), 2, "fin de la démonstration atteinte");
   assert.equal(count(ctx, "SELECT COUNT(*) AS n FROM settings WHERE key = 'caisse.prefixe'"), 0, "aucune ligne caisse.prefixe écrite");
   assert.deepEqual(ctx.db.prepare("SELECT DISTINCT series FROM invoices").all().map((l) => (l as { series: string }).series), ["FAC"]);
+});
+
+// seed.ts importe « ./db.js » : il ne se charge qu'assemblé (voir bundleOf).
+const { produitsDemo, servicesDemo } = await import(await bundleOf("./seed.ts"));
+
+test("jeu de démonstration converti : XAF inchangé, euros ronds", () => {
+  const xaf = servicesDemo("XAF") as (string | number)[][];
+  assert.ok(xaf.some((s) => s[6] === 20000), "Pose de gel à 20 000 F");
+  const eur = (servicesDemo("EUR") as number[][]).map((s) => s[6]);
+  assert.ok(eur.every((p) => p % 50 === 0 && p >= 100 && p < 20000), String(eur)); // 1 € à 200 €, ronds à 0,50 €
+  const produits = produitsDemo("EUR") as number[][];
+  assert.ok(produits.every((p) => p[6] % 50 === 0 && p[7] % 50 === 0), JSON.stringify(produits));
 });

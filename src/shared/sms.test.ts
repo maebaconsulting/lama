@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { estimateTemplate, smsCount } from "./sms.ts";
+import { SAMPLE_LENGTHS, estimateTemplate, smsCount } from "./sms.ts";
 
 test("alphabet GSM : 160 caractères pour un SMS, 153 par segment au-delà ; é è à ù restent en GSM", () => {
   assert.deepEqual(smsCount("Bonjour Aïcha"), { encoding: "unicode", units: 13, segments: 1 }, "ï n'est pas dans l'alphabet GSM");
@@ -35,4 +35,8 @@ test("estimation d'un texte à variables : longueurs types, variable inconnue la
 test("estimation du texte d'un produit recommandé : {produit} et {prix} à leur longueur type", () => {
   assert.equal(estimateTemplate("{prenom}, here is {produit} ({prix}), which we recommend at {institut}."), 1);
   assert.equal(estimateTemplate("{produit}".repeat(6)), 2, "six noms de produit de 30 caractères : 180, deux SMS");
+});
+
+test("longueur type du prix : 16 caractères (montant à centimes avec libellé)", () => {
+  assert.equal(SAMPLE_LENGTHS.prix, 16);
 });

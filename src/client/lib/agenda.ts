@@ -3,7 +3,7 @@
  * navigateur pour être testées sous Node : colonnes, ligne « maintenant »,
  * défilement à l'ouverture, créneau touché, praticienne montrée sur téléphone
  * et glissement latéral. Les heures sont des chaînes `HH:MM` à l'heure de
- * Douala ; la journée va de 07:00 à 21:00 (`lib/creneaux.ts`).
+ * Douala ; la journée va de 07:00 à 23:00 (`lib/creneaux.ts`).
  */
 import { DAY_END_HOUR, DAY_START_HOUR, SLOT_MINUTES } from "./creneaux.ts";
 import { awaitingArrival } from "./fiche-rdv.ts";
@@ -49,14 +49,14 @@ export function offeredStaffId(wanted: number | null | undefined, staff: { id: n
   return wanted != null && staff.some((s) => s.id === wanted) ? String(wanted) : "";
 }
 
-/** Hauteur totale de la grille, de 07:00 à 21:00. */
+/** Hauteur totale de la grille, de 07:00 à 23:00. */
 export function gridHeight(hourHeight: number = HOUR_HEIGHT_PX): number {
   return ((DAY_END - DAY_START) / 60) * hourHeight;
 }
 
 /**
  * Position verticale (px) de l'heure `time` sur la grille : celle de la ligne
- * « maintenant ». `null` avant 07:00, après 21:00 ou pour une heure illisible :
+ * « maintenant ». `null` avant 07:00, après 23:00 ou pour une heure illisible :
  * la ligne n'est alors pas dessinée.
  */
 export function nowLineTop(time: string, hourHeight: number = HOUR_HEIGHT_PX): number | null {
@@ -68,7 +68,7 @@ export function nowLineTop(time: string, hourHeight: number = HOUR_HEIGHT_PX): n
 /**
  * Défilement vertical à l'ouverture d'un jour. Jour courant : une heure au-dessus
  * de l'heure courante, pour garder le rendez-vous qui vient de commencer en vue ;
- * tout en bas après 21:00 ; le début d'un soin encore en cours (`ongoingStart`) reste
+ * tout en bas après 23:00 ; le début d'un soin encore en cours (`ongoingStart`) reste
  * en vue. Autre jour, ou heure illisible : le haut de la journée.
  */
 export function initialScrollTop(day: string, today: string, time: string, hourHeight: number = HOUR_HEIGHT_PX, ongoingStart?: string): number {

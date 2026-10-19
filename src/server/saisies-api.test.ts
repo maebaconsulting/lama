@@ -9,7 +9,7 @@ import { setupApp } from "./test-support.ts";
  * catalogue (V1-12) et des notes de rendez-vous (V1-13).
  */
 const fr = { "Accept-Language": "fr" };
-const PLAGE_FR = "Les heures vont de 07:00 à 21:00, par pas de 5 minutes.";
+const PLAGE_FR = "Les heures vont de 07:00 à 23:00, par pas de 5 minutes.";
 const FORMAT_FR = "Les heures doivent être au format HH:MM";
 
 async function setup(t: { after: (fn: () => void) => void }) {
@@ -31,28 +31,29 @@ test("V1-06 : « aicha » trouve le rendez-vous d'« Aïcha », le numéro APT r
   assert.ok(byRef.body.appointments.some((a: { id: number }) => a.id === id), "recherche par numéro APT");
 });
 
-test("V1-08 : heures illisibles ou hors grille refusées en 400 lisible ; 07:00 et une fin à 21:00 acceptées", async (t) => {
+test("V1-08 : heures illisibles ou hors grille refusées en 400 lisible ; 07:00 et une fin à 23:00 acceptées", async (t) => {
   const { db, call } = await setup(t);
   // Prestation 2 : 30 minutes ; sans praticienne, aucun chevauchement possible avec la démonstration.
   const base = { client_id: 1, staff_id: null, scheduled_date: "2026-10-12", service_ids: [2] };
-  const refus: [string, string][] = [["25:70", FORMAT_FR], ["06:30", PLAGE_FR], ["21:30", PLAGE_FR], ["09:07", PLAGE_FR]];
+  const refus: [string, string][] = [["25:70", FORMAT_FR], ["06:30", PLAGE_FR], ["23:30", PLAGE_FR], ["09:07", PLAGE_FR]];
   for (const [start_time, attendu] of refus) {
     const res = await call("POST", "/api/appointments", { ...base, start_time }, fr);
     assert.equal(res.status, 400, start_time);
     assert.equal(res.body.error, attendu, start_time);
   }
-  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "06:30" })).body.error, "Times run from 07:00 to 21:00, in steps of 5 minutes.");
+  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "06:30" })).body.error, "Times run from 07:00 to 23:00, in steps of 5 minutes.");
   assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "07:00" })).status, 201);
-  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "20:30" })).status, 201, "fin à 21:00 acceptée");
-  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "20:45" })).status, 400, "fin à 21:15 refusée");
+  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "22:30" })).status, 201, "fin à 23:00 acceptée");
+  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "22:45" })).status, 400, "fin à 23:15 refusée");
 
   const id = (await call("POST", "/api/appointments", { ...base, start_time: "10:00" })).body.appointment.id as number;
-  const moved = await call("PUT", `/api/appointments/${id}`, { start_time: "21:30" }, fr);
+  // 23:15 et non 23:30 : déplacé à 23:30, un soin de 30 minutes finirait à minuit, refusé plus tôt (« finir après son début, le même jour »).
+  const moved = await call("PUT", `/api/appointments/${id}`, { start_time: "23:15" }, fr);
   assert.equal(moved.status, 400);
   assert.equal(moved.body.error, PLAGE_FR);
-  assert.equal((await call("PUT", `/api/appointments/${id}`, { start_time: "10:00", end_time: "21:30" })).status, 400, "fin saisie hors grille");
-  assert.equal((await call("PUT", `/api/appointments/${id}`, { start_time: "20:30" })).status, 200, "déplacé pour finir à 21:00");
-  assert.deepEqual({ ...(db.prepare("SELECT start_time, end_time FROM appointments WHERE id = ?").get(id) as object) }, { start_time: "20:30", end_time: "21:00" });
+  assert.equal((await call("PUT", `/api/appointments/${id}`, { start_time: "10:00", end_time: "23:30" })).status, 400, "fin saisie hors grille");
+  assert.equal((await call("PUT", `/api/appointments/${id}`, { start_time: "22:30" })).status, 200, "déplacé pour finir à 23:00");
+  assert.deepEqual({ ...(db.prepare("SELECT start_time, end_time FROM appointments WHERE id = ?").get(id) as object) }, { start_time: "22:30", end_time: "23:00" });
   // Ancien rendez-vous hors grille : il change de jour sans que ses heures soient contrôlées.
   db.prepare("UPDATE appointments SET start_time = '06:30', end_time = '07:00' WHERE id = ?").run(id);
   assert.equal((await call("PUT", `/api/appointments/${id}`, { scheduled_date: "2026-10-13", allow_conflict: true })).status, 200, "heures anciennes gardées");
@@ -62,34 +63,34 @@ test("V1-08 : heures illisibles ou hors grille refusées en 400 lisible ; 07:00 
   assert.equal(tot.status, 400);
   assert.equal(tot.body.error, PLAGE_FR);
   assert.equal((await call("POST", "/api/blocked-slots", { ...slot, start_time: "12:00", end_time: "12:07" })).status, 400);
-  assert.equal((await call("POST", "/api/blocked-slots", { ...slot, start_time: "20:00", end_time: "21:00" })).status, 201);
+  assert.equal((await call("POST", "/api/blocked-slots", { ...slot, start_time: "22:00", end_time: "23:00" })).status, 201);
 });
 
-test("restes V 1.0, point 5 : une fin après 21:00 est nommée dans le message, en français et en anglais", async (t) => {
+test("restes V 1.0, point 5 : une fin après 23:00 est nommée dans le message, en français et en anglais", async (t) => {
   const { call } = await setup(t);
   // Prestation 2 : 30 minutes ; sans praticienne, aucun chevauchement possible avec la démonstration.
   const base = { client_id: 1, staff_id: null, scheduled_date: "2026-10-12", service_ids: [2] };
-  const created = await call("POST", "/api/appointments", { ...base, start_time: "20:45" }, fr);
+  const created = await call("POST", "/api/appointments", { ...base, start_time: "22:45" }, fr);
   assert.equal(created.status, 400);
-  assert.equal(created.body.error, "Le rendez-vous finirait à 21:15, après la fermeture à 21:00.");
-  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "20:45" })).body.error, "The appointment would end at 21:15, after closing time at 21:00.");
+  assert.equal(created.body.error, "Le rendez-vous finirait à 23:15, après la fermeture à 23:00.");
+  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "22:45" })).body.error, "The appointment would end at 23:15, after closing time at 23:00.");
 
   const id = (await call("POST", "/api/appointments", { ...base, start_time: "10:00" })).body.appointment.id as number;
-  const moved = await call("PUT", `/api/appointments/${id}`, { start_time: "20:50" }, fr);
+  const moved = await call("PUT", `/api/appointments/${id}`, { start_time: "22:50" }, fr);
   assert.equal(moved.status, 400);
-  assert.equal(moved.body.error, "Le rendez-vous finirait à 21:20, après la fermeture à 21:00.", "fin calculée au déplacement");
-  const ended = await call("PUT", `/api/appointments/${id}`, { start_time: "10:00", end_time: "21:30" });
+  assert.equal(moved.body.error, "Le rendez-vous finirait à 23:20, après la fermeture à 23:00.", "fin calculée au déplacement");
+  const ended = await call("PUT", `/api/appointments/${id}`, { start_time: "10:00", end_time: "23:30" });
   assert.equal(ended.status, 400);
-  assert.equal(ended.body.error, "The appointment would end at 21:30, after closing time at 21:00.", "fin saisie au déplacement");
+  assert.equal(ended.body.error, "The appointment would end at 23:30, after closing time at 23:00.", "fin saisie au déplacement");
 
-  const slot = { staff_id: 1, blocked_date: "2026-10-12", allow_conflict: true, start_time: "20:00", end_time: "21:30" };
+  const slot = { staff_id: 1, blocked_date: "2026-10-12", allow_conflict: true, start_time: "22:00", end_time: "23:30" };
   const blockedFr = await call("POST", "/api/blocked-slots", slot, fr);
   assert.equal(blockedFr.status, 400);
-  assert.equal(blockedFr.body.error, "Le créneau bloqué finirait à 21:30, après la fermeture à 21:00.");
-  assert.equal((await call("POST", "/api/blocked-slots", slot)).body.error, "The blocked time would end at 21:30, after closing time at 21:00.");
+  assert.equal(blockedFr.body.error, "Le créneau bloqué finirait à 23:30, après la fermeture à 23:00.");
+  assert.equal((await call("POST", "/api/blocked-slots", slot)).body.error, "The blocked time would end at 23:30, after closing time at 23:00.");
 
   // Un début hors grille garde le message général.
-  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "21:30" }, fr)).body.error, PLAGE_FR);
+  assert.equal((await call("POST", "/api/appointments", { ...base, start_time: "23:30" }, fr)).body.error, PLAGE_FR);
 });
 
 test("V1-09 : cliente, praticienne ou rendez-vous disparus : 404 avec le message du dictionnaire, jamais 500", async (t) => {
@@ -177,4 +178,17 @@ test("V1-13 : note de rendez-vous non vide, 2 000 caractères au plus", async (t
   assert.equal(count(), 0);
   assert.equal((await call("POST", `/api/appointments/${id}/notes`, { content: "a".repeat(2000) })).status, 201);
   assert.equal(count(), 1);
+});
+
+test("rendez-vous : total_price entier positif ou nul, en unités mineures (spec devise § 1)", async (t) => {
+  const { call } = await setup(t);
+  const created = await call("POST", "/api/appointments", { client_id: 1, staff_id: null, scheduled_date: "2026-10-12", start_time: "10:00", service_ids: [2] }, fr);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const id = created.body.appointment.id as number;
+  for (const total_price of [15.5, -1]) {
+    const res = await call("PUT", `/api/appointments/${id}`, { total_price }, fr);
+    assert.equal(res.status, 400, String(total_price));
+    assert.match(res.body.error, /total_price/, String(total_price));
+  }
+  assert.equal((await call("PUT", `/api/appointments/${id}`, { total_price: 15000 }, fr)).status, 200);
 });

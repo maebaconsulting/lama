@@ -55,23 +55,32 @@ export function decodeCp858(bytes: Uint8Array): string {
   return [...bytes].map((b) => (b < 0x80 ? String.fromCharCode(b) : [...CP858_HIGH][b - 0x80])).join("");
 }
 
-/** Découpe un texte en lignes de `width` colonnes au plus, aux espaces quand c'est possible. */
+/**
+ * Découpe un texte en lignes de `width` colonnes au plus, aux espaces quand c'est possible.
+ * Le retrait de tête d'un paragraphe (supplément sous sa prestation) est gardé sur chaque ligne,
+ * y compris les lignes de continuation : le texte est découpé sur la largeur restante.
+ */
 export function wrap(text: string, width: number): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split("\n")) {
+    const indent = Math.min(paragraph.length - paragraph.trimStart().length, Math.max(0, width - 1));
+    const pad = " ".repeat(indent);
+    const room = width - indent;
     let line = "";
-    for (const word of paragraph.split(" ")) {
+    const out: string[] = [];
+    for (const word of paragraph.slice(indent).split(" ")) {
       let w = word;
-      while ([...w].length > width) {
-        if (line) { lines.push(line); line = ""; }
-        lines.push([...w].slice(0, width).join(""));
-        w = [...w].slice(width).join("");
+      while ([...w].length > room) {
+        if (line) { out.push(line); line = ""; }
+        out.push([...w].slice(0, room).join(""));
+        w = [...w].slice(room).join("");
       }
       const candidate = line ? `${line} ${w}` : w;
-      if ([...candidate].length <= width) line = candidate;
-      else { lines.push(line); line = w; }
+      if ([...candidate].length <= room) line = candidate;
+      else { out.push(line); line = w; }
     }
-    lines.push(line);
+    out.push(line);
+    for (const l of out) lines.push(indent && l ? `${pad}${l}` : l);
   }
   return lines;
 }

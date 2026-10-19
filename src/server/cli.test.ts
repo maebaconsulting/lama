@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { openSecret } from "./auth/crypto.ts";
 import { openDatabase } from "./storage.ts";
+import { runMigrations } from "./migrations.ts";
 import { cliBundle } from "./test-support.ts";
 
 const CLI = cliBundle();
@@ -56,4 +57,58 @@ test("cli waha-cle : une adresse choisie par l'administrateur est gardée, la cl
   const maitresse = new Uint8Array(Buffer.from(readFileSync(join(premier.dir, "config", "master.key"), "utf8").trim(), "base64"));
   assert.equal(JSON.parse(openSecret((relue.prepare("SELECT value FROM settings WHERE key = 'waha.cle'").get() as { value: string }).value, maitresse)), "b".repeat(64));
   relue.close();
+});
+
+/** Lance `cli lire-devise` sur le dossier `dir`, comme lama-formation.sh sous le compte de lama. */
+function lireDevise(dir: string) {
+  const env = { ...process.env, LAMA_DEV: "1", LAMA_DATA_DIR: dir, LAMA_CONFIG_DIR: join(dir, "config"), LAMA_LANGUE: "fr" };
+  return spawnSync(process.execPath, ["--no-warnings", CLI, "lire-devise"], { env, encoding: "utf8" });
+}
+
+test("cli lire-devise : les trois réglages en options de formation-comptes, une par ligne ; rien sans base ni réglage ; jamais d'écriture", () => {
+  const vide = mkdtempSync(join(tmpdir(), "lama-cli-"));
+  const absente = lireDevise(vide);
+  assert.equal(absente.status, 0, absente.stderr);
+  assert.equal(absente.stdout, "");
+  assert.equal(existsSync(join(vide, "lama.db")), false, "aucune base créée");
+
+  const dir = mkdtempSync(join(tmpdir(), "lama-cli-"));
+  const db = openDatabase(join(dir, "lama.db"));
+  runMigrations(db);
+  db.close();
+  assert.equal(lireDevise(dir).stdout, "", "base neuve : rien d'écrit, défaut XAF");
+
+  const ecrit = openDatabase(join(dir, "lama.db"));
+  const reglage = ecrit.prepare("INSERT INTO settings (key, value, secret, updated_at) VALUES (?, ?, 0, 0)");
+  reglage.run("institut.devise", '"EUR"');
+  reglage.run("affichage.symbole_position", '"avant"');
+  reglage.run("affichage.symbole_ecran", "false");
+  ecrit.close();
+  const avant = statSync(join(dir, "lama.db")).mtimeMs;
+  const r = lireDevise(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, "--devise\nEUR\n--position\navant\n--symbole-ecran\nnon\n");
+  assert.equal(statSync(join(dir, "lama.db")).mtimeMs, avant, "lecture seule");
+});
+
+/** Lance `cli importer-catalogue` sur un fichier écrit dans un dossier jetable. */
+function importerCatalogue(contenu: string) {
+  const dir = mkdtempSync(join(tmpdir(), "lama-cli-"));
+  const fichier = join(dir, "catalogue.csv");
+  writeFileSync(fichier, contenu, "utf8");
+  const env = { ...process.env, LAMA_DEV: "1", LAMA_DATA_DIR: dir, LAMA_CONFIG_DIR: join(dir, "config"), LAMA_LANGUE: "fr" };
+  return spawnSync(process.execPath, ["--no-warnings", CLI, "importer-catalogue", fichier], { env, encoding: "utf8" });
+}
+
+test("cli importer-catalogue : une erreur de fichier s'imprime seule, sans numéro de ligne ni nombre de lignes à corriger", () => {
+  const entete = importerCatalogue("nom;prix\nTissage;5000\n");
+  assert.equal(entete.status, 1);
+  assert.match(entete.stderr, /^Colonnes manquantes sur la première ligne\u00a0: .+\.\n$/);
+  assert.doesNotMatch(entete.stderr, /Ligne 1|lignes à corriger/);
+  const guillemets = importerCatalogue('nom;prix\n"Tissage;5000\n');
+  assert.equal(guillemets.status, 1);
+  assert.equal(guillemets.stderr, "Ligne 2\u00a0: guillemets mal fermés.\n");
+  const rien = importerCatalogue("");
+  assert.equal(rien.status, 1);
+  assert.doesNotMatch(rien.stderr, /Ligne 1|lignes à corriger/);
 });

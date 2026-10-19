@@ -1,31 +1,34 @@
 /**
  * Impression d'un document (spec du 03/10/2026, § 1 et § 2) : facture, avoir
- * ou reçu d'acompte, depuis ses valeurs figées (mêmes rangées que le PDF).
+ * ou reçu d'acompte, depuis ses valeurs figées (mêmes rangées que le PDF) ;
+ * ticket de clôture de caisse, document interne sans compteur de duplicata.
  * Lecture du compteur, envoi et incrément se font d'un seul tenant (un envoi
  * à la fois dans le processus) : deux impressions simultanées du même
  * document donnent un original et un duplicata, jamais deux originaux.
  */
 import { depositTicket } from "../caisse/acompte-routes.ts";
 import { readDeposit } from "../caisse/acompte.ts";
+import { closingRows, readClosing } from "../caisse/cloture.ts";
+import { closingIdentity } from "../caisse/cloture-routes.ts";
 import { invoiceTicket, readInvoice } from "../caisse/routes.ts";
 import { ticketRows, type TicketDocument } from "../caisse/ticket.ts";
 import { readPrintImage } from "../institut/logos.ts";
-import { message } from "../messages.ts";
+import { message, type Lang } from "../messages.ts";
 import { getSetting } from "../settings.ts";
 import type { StorageBinding } from "../storage.ts";
 import { ticketBytes } from "./escpos.ts";
 import { unpackPrintImage, type PrintImage } from "./image-logo.ts";
 import { exclusive, sendToPrinter, type PrintFailure } from "./imprimante.ts";
 
-export type PrintKind = "invoice" | "credit" | "deposit";
-export const PRINT_KINDS: readonly PrintKind[] = ["invoice", "credit", "deposit"];
+export type PrintKind = "invoice" | "credit" | "deposit" | "closing";
+export const PRINT_KINDS: readonly PrintKind[] = ["invoice", "credit", "deposit", "closing"];
 
 export type DocumentPrint =
   | { ok: true; number: string; duplicate: boolean }
   | { ok: false; reason: PrintFailure | "introuvable" };
 
 /** Document à imprimer, son numéro, sa table et son compteur ; `null` s'il n'existe pas ou n'est pas de ce type. */
-async function load(storage: StorageBinding, doc: { kind: PrintKind; id: number }): Promise<{ ticket: TicketDocument; table: "invoices" | "deposits"; count: number } | null> {
+async function load(storage: StorageBinding, doc: { kind: Exclude<PrintKind, "closing">; id: number }): Promise<{ ticket: TicketDocument; table: "invoices" | "deposits"; count: number } | null> {
   if (doc.kind === "deposit") {
     const deposit = storage.transaction!((db) => readDeposit(db, doc.id));
     if (!deposit) return null;
@@ -54,7 +57,7 @@ export async function paperLogo(): Promise<PrintImage | null> {
 }
 
 /** Imprime le document sur l'imprimante de `address` ; ne lève jamais pour une panne d'imprimante. */
-export function printDocument(storage: StorageBinding, doc: { kind: PrintKind; id: number }, address: string): Promise<DocumentPrint> {
+export function printDocument(storage: StorageBinding, doc: { kind: Exclude<PrintKind, "closing">; id: number }, address: string): Promise<DocumentPrint> {
   return exclusive(async () => {
     const found = await load(storage, doc);
     if (!found) return { ok: false, reason: "introuvable" } as const;
@@ -66,5 +69,21 @@ export function printDocument(storage: StorageBinding, doc: { kind: PrintKind; i
     if (!sent.ok) return sent;
     storage.transaction!((db) => db.prepare("INSERT INTO print_counts (doc, doc_id, count) VALUES (?, ?, 1) ON CONFLICT (doc, doc_id) DO UPDATE SET count = count + 1").run(found.table, doc.id));
     return { ok: true, number: found.ticket.number, duplicate } as const;
+  });
+}
+
+/**
+ * Imprime le ticket de clôture `id` dans la langue `lang` de l'écran, comme son
+ * PDF. Document interne : chaque impression est un original, rien n'est compté.
+ */
+export function printClosing(storage: StorageBinding, id: number, address: string, lang: Lang): Promise<DocumentPrint> {
+  return exclusive(async () => {
+    const closing = storage.transaction!((db) => readClosing(db, id));
+    if (!closing) return { ok: false, reason: "introuvable" } as const;
+    const logo = await paperLogo();
+    const bytes = ticketBytes(closingRows(closing, await closingIdentity(), lang, { logo: logo !== null }), { logo });
+    const sent = await sendToPrinter(address, bytes, { checkStatus: true });
+    if (!sent.ok) return sent;
+    return { ok: true, number: `${closing.day} n°\u00a0${closing.seq}`, duplicate: false } as const;
   });
 }

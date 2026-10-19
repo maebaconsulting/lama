@@ -21,3 +21,9 @@ test("conflit avec cliente ou motif : la donnée est gardée telle quelle", () =
     "Ce membre de l'équipe n'est pas disponible\u00a0: 10:00–11:00 déjà réservé.",
   );
 });
+
+test("demande en ligne à confirmer : « demande en ligne de … » dans la langue de l'écran", () => {
+  const c = { kind: "demande" as const, start_time: "10:00", end_time: "11:00", label: "Mireille Ngo" };
+  assert.match(describeConflict(c, "fr"), /demande en ligne de Mireille Ngo$/);
+  assert.match(describeConflict(c, "en"), /online request from Mireille Ngo$/);
+});

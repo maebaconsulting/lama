@@ -4,7 +4,8 @@
  * calcul sont partagées avec le serveur (`src/shared/fidelite.ts`).
  */
 import { translate, translatePlural, type Key, type Lang } from "../i18n/translate.ts";
-import { formatAmount, formatPrice, parseAmount } from "./format.ts";
+import { formatEntier, formatPrice, parseAmount, readAmount } from "./format.ts";
+import { deviseActive } from "../../shared/devise-active.ts";
 import { reachableTiers, type Tier } from "../../shared/fidelite.ts";
 
 /** Nombre entier saisi (espaces de milliers tolérées) ; `null` si ce n'en est pas un. */
@@ -15,17 +16,21 @@ export function parseWhole(text: string): number | null {
 
 /** « 140 points », « 1 point », « −20 points » (signe moins typographique), milliers groupés. */
 export function pointsText(points: number, lang: Lang): string {
-  const nombre = `${points < 0 ? "−" : ""}${formatAmount(Math.abs(points), lang)}`;
+  const nombre = `${points < 0 ? "−" : ""}${formatEntier(Math.abs(points))}`;
   return translatePlural(lang, "fidelite.points", Math.abs(points), { nombre });
 }
 
 /**
- * Montant entier en francs saisi : mêmes séparateurs de milliers que le reste
- * de lama (`parseAmount`) : « 15.000 », « 15,000 », « 15 000 ». Une vraie
- * décimale (« 1,5 », « 2.50 ») est refusée : `null`.
+ * Montant saisi dans la rubrique Fidélité, en unités mineures : sans
+ * centimes, une vraie décimale (« 1,5 ») est refusée ; avec centimes, la
+ * lecture commune (`readAmount`) s'applique. `null` si illisible.
  */
 export function parseWholeAmount(text: string): number | null {
   const t = text.trim();
+  if (deviseActive().decimales > 0) {
+    const v = readAmount(t);
+    return v === null || v > 999_999_999 ? null : v;
+  }
   if (!/^(\d+|\d{1,3}([.,\s\u00a0\u202f]\d{3})+)$/.test(t) || t.replace(/\D/g, "").length > 9) return null;
   return parseAmount(t);
 }
@@ -71,7 +76,7 @@ export function entryText(e: Pick<LoyaltyEntry, "kind" | "note" | "invoice_numbe
 
 /** Points signés : « +12 », « −12 » (signe moins typographique), milliers groupés. */
 export function signedPoints(points: number, lang: Lang): string {
-  return `${points < 0 ? "−" : "+"}${formatAmount(Math.abs(points), lang)}`;
+  return `${points < 0 ? "−" : "+"}${formatEntier(Math.abs(points))}`;
 }
 
 /** Prochain palier : « Encore 30 points avant 5 000 F de remise » ; sinon « Tous les paliers… ». */

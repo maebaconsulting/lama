@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
+import { Plus } from "lucide-preact";
 import { api } from "../../api";
 import { useAuth } from "../../auth-context";
 import { useApp } from "../../context";
@@ -12,6 +13,7 @@ import { aroundAmount, invoiceDiscountLabel, methodLabel, vatLabel } from "@/lib
 import type { Invoice, SaleSettings } from "@/lib/caisse-types";
 import { formatInstant, formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { orderedLines } from "../../../shared/supplements";
 import { EtatChargement, EtatErreur, Montant } from "../comptoir";
 import { ACTION, EnTeteFiche, LigneDetail } from "../fiches/corps-fiche";
 import { BoutonsTicket } from "./boutons-ticket";
@@ -114,10 +116,13 @@ export function FicheFacture({ id }: { id: number }) {
       <section className="space-y-2 border-t border-filet pt-4">
         <h3 className="etiquette text-encre-grise">{t("facture.lignes")}</h3>
         <ul className="divide-y divide-border">
-          {inv.lines.map((l) => (
-            <li key={l.id} className="flex items-start justify-between gap-3 py-2">
+          {orderedLines(inv.lines).map((l) => (
+            <li key={l.id} className={cn("flex items-start justify-between gap-3 py-2", l.supplement && "pl-4")}>
               <span className="min-w-0 space-y-0.5">
-                <span className="block break-words font-medium">{pickText(lang, l.label_fr, l.label_en)}</span>
+                <span className="flex items-baseline gap-1.5 break-words font-medium">
+                  {l.supplement && <Plus className="h-3 w-3 shrink-0 text-encre-grise" aria-hidden="true" />}
+                  <span className="min-w-0 break-words">{pickText(lang, l.label_fr, l.label_en)}</span>
+                </span>
                 <span className="block text-sm text-muted-foreground">
                   {t("facture.quantite_prix", { quantite: l.quantity, prix: formatPrice(l.unit_price, lang) })}{l.staff_name ? ` · ${l.staff_name}` : ""}
                 </span>

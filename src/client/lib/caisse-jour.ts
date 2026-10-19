@@ -5,7 +5,7 @@
  */
 import type { CashClosing, CashDay, ClosingSummary, DayDocument, MethodTotal } from "./caisse-types.ts";
 import type { Lang } from "../i18n/translate.ts";
-import { formatPrice, parseAmount } from "./format.ts";
+import { formatPrice, readAmount } from "./format.ts";
 import { CLOSING_WINDOW_DAYS } from "../../shared/caisse.ts";
 
 /** Jour voisin `aaaa-mm-jj` (`delta` jours plus tard, ou plus tôt s'il est négatif). */
@@ -14,13 +14,10 @@ export function shiftDay(day: string, delta: number): string {
   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
 }
 
-/** Espèces comptées saisies : `null` tant que le champ est vide ou illisible, 0 accepté. */
+/** Espèces comptées saisies : `null` tant que le champ est vide ou illisible, 0 accepté (« 0 », « 0,00 »). */
 export function parseCounted(text: string): number | null {
   const t = text.trim();
-  if (t === "") return null;
-  if (/^0+$/.test(t)) return 0;
-  const n = parseAmount(t);
-  return n > 0 ? n : null;
+  return t === "" ? null : readAmount(t);
 }
 
 /** Écart entre les espèces comptées et attendues : juste, de plus ou de moins, et de combien. */

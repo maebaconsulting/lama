@@ -75,7 +75,7 @@ test("avoir total : rendez-vous de nouveau à encaisser, stock rendu, nouvel enc
   assert.equal((await g("DELETE", `/api/appointments/${apt}`)).status, 409, "un rendez-vous facturé ne se supprime toujours pas");
 
   const journal = ctx.db.prepare("SELECT action, target FROM audit_log WHERE action = 'avoir.emis'").all().map((r) => ({ ...r }));
-  assert.deepEqual(journal, [{ action: "avoir.emis", target: "AV-2026-000001 (60\u202f000\u00a0F, FAC-2026-000001)" }]);
+  assert.deepEqual(journal, [{ action: "avoir.emis", target: "AV-2026-000001 (60\u202f000\u00a0FCFA, FAC-2026-000001)" }]);
   assert.equal(auditAction("avoir.emis", "fr"), "Avoir émis");
   assert.equal(auditAction("avoir.emis", "en"), "Credit note issued");
   assert.equal(resourceFor("/api/credit-notes"), "invoices");

@@ -10,7 +10,7 @@ The application itself follows the language of each account: everyone chooses it
 
 ## Install
 
-1. Install Ubuntu Server 24.04 on the mini PC (maintenance account of your choice, SSH enabled). Connect it to the router with a cable.
+1. Install Ubuntu Server 24.04, or Ubuntu 24.04 or 26.04 desktop, on the mini PC (maintenance account of your choice, SSH enabled: on desktop, `sudo apt install openssh-server`). Connect it to the router with a cable. On desktop, the installation turns sleep off.
 2. On the development computer, build the archive with `pnpm paquet`, then copy it to the server (`scp paquets/lama-….tar.gz technicien@address:`).
 3. On the server, in a terminal (an interactive SSH session is fine):
 
@@ -20,10 +20,17 @@ cd lama-*/
 sudo ./deploy/installer.sh
 ```
 
+When it starts, the script offers two modes:
+
+- **Automatic** (`sudo ./deploy/installer.sh --auto`): default settings, no questions. Time zone Africa/Douala, WhatsApp installed, sleep turned off on Ubuntu desktop, backup drive used only if already prepared, training database and Google Drive left for later.
+- **Assisted** (`sudo ./deploy/installer.sh --assiste`): one question for each choice (language, time zone, exact time, sleep, preparing a new USB drive, WhatsApp, training database, Google Drive). The default answer is in square brackets; Enter alone takes it.
+
+In both modes, the installation stops on the recovery keys and waits for YES.
+
 The installation must run in a real terminal: the script refuses to go on otherwise, because the recovery keys (see below) are shown on screen only, once.
 
 4. The script first installs the system packages (Node 24, age, rclone, avahi, openssl, polkit, systemd-timesyncd) and creates the `lama` service account. It then shows the recovery keys and waits for the YES confirmation before writing anything to disk: only after that confirmation does it install the program in `/opt/lama`, make the HTTPS certificate for `lama.local` and the server's current IP address (see "HTTPS certificate"), prepare the backup drive if it is plugged in, then install and start the services. The server clock must be right before the installation: check it with `date`, and correct it if needed with `sudo timedatectl set-time 'YYYY-MM-DD HH:MM:SS'`.
-5. From a device on the Wi-Fi, open http://lama.local/certificat, approve the certificate, then open https://lama.local: the setup screen creates the administrator account, in the language shown on that screen. Sign in, then create the manager's account in Settings, Team and accounts. The manager then enters the institute's name in Settings, Institute: it heads the receipts and the till closings (left empty, it is not printed).
+5. From a device on the Wi-Fi, open http://lama.local/certificat, approve the certificate, then open https://lama.local: the setup screen creates the administrator account, in the language shown on that screen, and chooses the currency; it stays editable in Settings, Checkout, Currency section, until the first sale. Sign in, then create the manager's account in Settings, Team and accounts. The manager then enters the institute's name in Settings, Institute: it heads the receipts and the till closings (left empty, it is not printed).
 
 The script can safely be run again with the same version, from an archive freshly extracted somewhere other than `/opt/lama`: it keeps the data, keys and settings already in place, and shows no new keys. With an archive of another version, it refuses and points to `mettre-a-jour.sh` (see "Update"), which backs up first and goes back if anything fails. It also refuses to run from `/opt/lama` itself; copy the archive elsewhere before running it again.
 
@@ -147,6 +154,8 @@ sudo systemctl disable --now lama-formation   # stop the training database, its 
 ```
 
 If the training sign-in screen shows "No training account", the accounts were not created: run `sudo lama-formation --comptes`.
+
+The training database takes the currency of the real database (with its symbol position and display): `--installer` and `--comptes` read it under the `lama` account, without writing anything there, and the demonstration is seeded in that currency. A training database that already has sales keeps its own.
 
 The reset is also available in the application: account `formation.admin`, Settings, Training, "Reset the training database" (tick the box, then the password is asked again). It takes effect when the service restarts, which systemd does by itself; everyone signs in again. The four training accounts are restored (role, record, name) and the declared devices are kept; everything else, accounts created during a session included (appointments, sales, records, settings), is erased and the "Institut Démo" demonstration comes back, with six months of history. If the command says that no account was kept, run `sudo lama-formation --comptes`. `mettre-a-jour.sh` restarts the training database on the new version; it has no backup and no recovery key, its data is fictitious.
 

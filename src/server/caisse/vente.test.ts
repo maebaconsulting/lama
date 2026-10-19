@@ -153,7 +153,7 @@ test("versements : somme exacte, monnaie recalculée, référence obligatoire po
   assert.deepEqual(cash, [{ method: "cash", amount: 59000, reference: "", cash_given: 70000, change_given: 11000 }]);
   assert.throws(() => checkPayments([{ method: "card", amount: 58000, reference: "", cash_given: null }], 59000, SETTINGS),
     (e: unknown) => e instanceof SaleError && e.status === 409 && e.extra.code === "total" && e.extra.due === 59000
-      && e.values.recu === "58\u202f000" && e.values.du === "59\u202f000", "mineur 3 : montants du message groupés comme à l'écran, extra.due resté un nombre pour l'écran");
+      && e.values.recu === "¤58000" && e.values.du === "¤59000", "montants passés par montant(), formatés dans la langue du message, extra.due resté un nombre pour l'écran");
   assert.throws(() => checkPayments([{ method: "momo", amount: 59000, reference: "", cash_given: null }], 59000, SETTINGS), (e: unknown) => e instanceof SaleError && e.key === "vente.reference_obligatoire");
   assert.throws(() => checkPayments([{ method: "card", amount: 59000, reference: "", cash_given: null }], 59000, { ...SETTINGS, methods: ["cash"] }), (e: unknown) => e instanceof SaleError && e.key === "vente.moyen_refuse");
 });

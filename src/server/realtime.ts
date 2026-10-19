@@ -33,8 +33,10 @@ const RESOURCES: Record<string, string> = {
   staff: "staff", services: "services", products: "products", outbox: "outbox", settings: "settings",
   accounts: "accounts", devices: "accounts", sales: "invoices", "credit-notes": "invoices", cash: "invoices", deposits: "invoices",
   whatsapp: "outbox", campaigns: "outbox", transfers: "appointments",
+  "demandes-en-ligne": "demandes_en_ligne", "en-ligne": "settings",
   // Sauvegarde lancée à la main : l'état des sauvegardes (bandeau des 36 h, rubrique Sauvegardes) suit « outbox ».
   backups: "outbox",
+  devise: "settings",
 };
 
 export function resourceFor(path: string): string | null {

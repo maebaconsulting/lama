@@ -8,7 +8,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { get } from "@clawnify/db";
-import { formatFrancsDocument } from "../../shared/caisse.ts";
+import { entierMineur, formatMontantDocument } from "../../shared/montants.ts";
 import type { Lang } from "../messages.ts";
 import { enqueue } from "../outbox/outbox.ts";
 import { IMAGE_VERSION_SQL } from "../produits/images.ts";
@@ -44,7 +44,7 @@ export async function productDraft(s: MessageSettings, productId: number, client
   const lang: Lang = client.language === "fr" || client.language === "en" ? client.language : s.lang;
   const name = lang === "en" && (product.name_en ?? "").trim() ? product.name_en! : product.name;
   const text = renderTemplate(s.texts.produit[lang], {
-    prenom: firstName(client.name), nom: client.name.trim(), produit: name, prix: formatFrancsDocument(product.price), institut: s.institut, telephone: s.telephone,
+    prenom: firstName(client.name), nom: client.name.trim(), produit: name, prix: formatMontantDocument(entierMineur(product.price), lang), institut: s.institut, telephone: s.telephone,
   });
   return { ok: true, draft: { to, lang, text, productName: product.name, imageVersion: product.image_version } };
 }

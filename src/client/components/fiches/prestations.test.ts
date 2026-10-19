@@ -20,7 +20,7 @@ test("fiche : bascule « Active » en interrupteur de 48 px, inactive pendant l'
   assert.match(fiche, /role="switch"\s*aria-checked=\{active\}\s*disabled=\{disabled\}/);
   assert.match(fiche, /<BasculeActive active=\{Boolean\(service\.active\)\} disabled=\{saving\} onToggle=\{toggle\} \/>/);
   assert.match(fiche, /updateService\(service\.id, \{ active: service\.active \? 0 : 1 \}\)/);
-  assert.equal(fiche.match(/\{commands\.manage && \(/g)?.length, 2, "bascule et Modifier, Supprimer");
+  assert.equal(fiche.match(/\{commands\.manage && \(/g)?.length, 3, "bascule et Modifier, suppléments, Supprimer");
   assert.match(fiche, /\{!commands\.manage && <LigneDetail libelle=\{t\("colonne\.statut"\)\}>/, "les autres rôles lisent l'état");
   assert.match(fiche, /onDelete=\{\(\) => deleteService\(service\.id\)\}/);
 });

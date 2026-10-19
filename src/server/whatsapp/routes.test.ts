@@ -55,7 +55,7 @@ test("droits : état pour l'administrateur, la gérante et la réception ; sessi
   assert.equal((await admin("GET", "/api/whatsapp/manual")).status, 403, "le texte des messages n'est jamais montré à l'administrateur");
   assert.equal((await admin("POST", "/api/clients/1/whatsapp", { text: "x" })).status, 403);
   const texts = (await gerante("GET", "/api/whatsapp/texts")).body.texts;
-  assert.equal(texts.length, 16, "confirmation, rappel, ticket, produit recommandé, anniversaire, absence, campagne et transfert, en français et en anglais");
+  assert.equal(texts.length, 24, "confirmation, rappel, ticket, produit recommandé, anniversaire, absence, campagne, transfert et les quatre textes de la réservation en ligne, en français et en anglais");
   assert.deepEqual(Object.keys(texts[0]).sort(), ["default", "key", "kind", "lang", "value"]);
 });
 

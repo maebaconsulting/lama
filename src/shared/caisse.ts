@@ -1,9 +1,11 @@
 /**
  * Calculs de la caisse (sous-projet 5 § 4.4), communs à l'écran et au serveur :
  * l'écran montre exactement ce que le serveur recalcule et facture. Montants
- * en francs CFA entiers ; aucune dépendance (ni navigateur, ni base), testé
- * sous Node.
+ * entiers en unités mineures de la devise de l'institut ; aucune dépendance
+ * (ni navigateur, ni base), testé sous Node.
  */
+
+import { deviseActive } from "./devise-active.ts";
 
 export type PaymentMethod = "cash" | "card" | "orange_money" | "momo";
 /** Moyens de paiement dans l'ordre d'affichage. */
@@ -44,35 +46,7 @@ export const CLOSING_WINDOW_DAYS = 30;
 /** Décalage de Douala sur UTC, toute l'année (pas d'heure d'été). */
 const DOUALA_OFFSET_MS = 60 * 60_000;
 
-/** Prix du catalogue (colonne `REAL`) en francs entiers, jamais négatif (§ 3). */
-export function wholeFrancs(price: number | null | undefined): number {
-  const n = Math.round(Number(price) || 0);
-  return n > 0 ? n : 0;
-}
-
-const FRANCS_FORMAT = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-
-/**
- * Montant entier de francs, groupé par milliers à l'identique de l'écran
- * (`formatPrice`, décision du 30/09/2026, § 8) : même espace fine insécable
- * entre les groupes, dans les deux langues. Sans la devise : les messages du
- * serveur (relecture finale, mineur 3) l'ajoutent eux-mêmes, avec l'espace
- * insécable de leur dictionnaire.
- */
-export function formatFrancs(amount: number): string {
-  return FRANCS_FORMAT.format(Math.round(Number(amount) || 0));
-}
-
-/**
- * Montant sur un document officiel (ticket, avoir, reçu d'acompte) : `13\u202f000\u00a0FCFA`
- * dans les deux langues, équivalent côté serveur de `formatPriceDocument`
- * (décision du 30/09/2026, § 8). L'écran écrit « F » (`formatPrice`).
- */
-export function formatFrancsDocument(amount: number): string {
-  return `${formatFrancs(amount)}\u00a0FCFA`;
-}
-
-/** Montant de la remise : pourcentage arrondi au franc, ou montant ; jamais plus que le sous-total. */
+/** Montant de la remise : pourcentage arrondi à l'unité mineure, ou montant ; jamais plus que le sous-total. */
 export function discountAmount(subtotal: number, discount: { kind: DiscountKind; value: number } | null | undefined): number {
   if (!discount || subtotal <= 0) return 0;
   const raw = discount.kind === "percent" ? Math.round((subtotal * discount.value) / 100) : Math.round(discount.value);
@@ -161,24 +135,23 @@ export function creditTotals(input: {
 
 /**
  * Montants rapides des espèces (§ 4.2), au-dessus du montant exact : les plus
- * petits multiples de 1 000, 2 000, 5 000 et 10 000 strictement supérieurs,
- * complétés par les multiples de 5 000 suivants ; les trois plus petits.
+ * petits multiples de chaque palier de la devise strictement supérieurs,
+ * complétés par les multiples du dernier palier divisé par deux ; les trois
+ * plus petits. XAF : paliers 1 000, 2 000, 5 000, 10 000, complément par 5 000.
  */
 export function quickAmounts(due: number): number[] {
   if (due <= 0) return [];
+  const paliers = deviseActive().paliers;
+  const pas = paliers[paliers.length - 1] / 2;
   const above = (step: number) => (Math.floor(due / step) + 1) * step;
-  const set = new Set([1000, 2000, 5000, 10000].map(above));
+  const set = new Set(paliers.map(above));
   let next = Math.max(...set);
   while (set.size < 3) {
-    next = (Math.floor(next / 5000) + 1) * 5000;
+    next = (Math.floor(next / pas) + 1) * pas;
     set.add(next);
   }
   return [...set].sort((a, b) => a - b).slice(0, 3);
 }
-
-/** Billets et pièces du franc CFA proposés pour rendre la monnaie (§ 4.2). */
-export const BILLS: readonly number[] = [10000, 5000, 2000, 1000];
-export const COINS: readonly number[] = [500, 100, 50, 25, 10];
 
 export interface ChangePart {
   value: number;
@@ -186,11 +159,12 @@ export interface ChangePart {
   kind: "billet" | "piece";
 }
 
-/** Coupures suggérées pour rendre `amount`, les plus grosses d'abord ; `rest` : moins de 10 francs non décomposés. */
+/** Coupures suggérées pour rendre `amount`, les plus grosses d'abord ; `rest` : ce qui reste sous la plus petite coupure. */
 export function changeBreakdown(amount: number): { parts: ChangePart[]; rest: number } {
+  const d = deviseActive();
   let left = Math.max(Math.round(amount), 0);
   const parts: ChangePart[] = [];
-  for (const [kind, values] of [["billet", BILLS], ["piece", COINS]] as const) {
+  for (const [kind, values] of [["billet", d.billets], ["piece", d.pieces]] as const) {
     for (const value of values) {
       const count = Math.floor(left / value);
       if (count > 0) {

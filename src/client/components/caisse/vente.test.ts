@@ -75,7 +75,7 @@ test("ticket : cliente obligatoire avec une prestation, − et + pour un produit
   // « Encaisser » ; seul un ticket vide, une cliente manquante ou un article retiré le bloque encore.
   assert.match(ticket, /const blocked = lines\.length === 0 \|\| missingClient \|\| lines\.some\(\(l\) => l\.missing\) \|\| depositExceeds \|\| depositOtherClient;/);
   assert.doesNotMatch(ticket, /totals\.due <= 0/, "« Encaisser 0 F » reste actif dès qu'une ligne est au ticket");
-  assert.match(ticket, /disabled=\{l\.stock !== null && l\.line\.quantity >= l\.stock\}/);
+  assert.match(ticket, /disabled=\{l\.stock !== null && quantityOf\(ticket, l\.line\.ref_id\) >= l\.stock\}/);
   assert.match(ticket, /onChange\(setLineStaff\(ticket, l\.index, Number\(\(e\.currentTarget as HTMLSelectElement\)\.value\) \|\| null\)\)/);
   assert.match(ticket, /\{settings\.vat_active && <Total libelle=\{vatLabel\(settings\.vat_rate \?\? 0, lang\)\} montant=\{formatPrice\(totals\.total_tva, lang\)\} \/>\}/);
   assert.match(ticket, /\{settings\.discounts && <Button/);
@@ -89,7 +89,7 @@ test("remise : pourcentage ou montant, motif obligatoire (« Autre » avec texte
   assert.match(fenetres, /\{off > 0 && exceedsCap\(subtotal, off, cap\) && <p className="text-sm text-encre-rouge">/);
   assert.match(fenetres, /"min-h-16 rounded-sm border px-3 text-sm font-medium/);
   assert.match(ticket, /defaultStaff=\{defaultTipStaff\(ticket, appointment\?\.staff_id \?\? null\)\}/);
-  assert.match(fenetres, /inputMode="numeric"/);
+  assert.match(fenetres, /inputMode=\{modeSaisieMontant\(\)\}/);
   assert.doesNotMatch(fenetres, /type="number"/, "montants en texte, lus par parseAmount");
 });
 
