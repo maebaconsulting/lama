@@ -303,7 +303,10 @@ etape "$(msg "Fuseau horaire et nom sur le réseau" "Time zone and network name"
 timedatectl set-timezone "$FUSEAU"
 hostnamectl set-hostname "$NOM_RESEAU"
 grep -q "^127\.0\.1\.1 $NOM_RESEAU\$" /etc/hosts || printf '127.0.1.1 %s\n' "$NOM_RESEAU" >> /etc/hosts
-systemctl enable --now avahi-daemon
+# avahi, déjà démarré par apt, garde l'ancien nom (par exemple lamaserver.local) tant qu'il
+# n'est pas relancé : sans restart, lama.local ne répondait pas (Ubuntu 26.04, 21/10/2026).
+systemctl enable avahi-daemon
+systemctl restart avahi-daemon
 # Ubuntu bureau se met en veille seul après quelques minutes sans clavier ni souris :
 # le serveur deviendrait injoignable. Veille et hibernation sont coupées pour de bon.
 if [ "$(systemctl get-default)" = "graphical.target" ] \

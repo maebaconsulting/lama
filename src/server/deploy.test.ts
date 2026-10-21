@@ -112,7 +112,7 @@ test("service : relance automatique, droits réduits, port 80 sans root, arrêt 
   for (const line of [
     "User=lama", "Group=lama", "Restart=always", "UMask=0077",
     "AmbientCapabilities=CAP_NET_BIND_SERVICE", "CapabilityBoundingSet=CAP_NET_BIND_SERVICE", "NoNewPrivileges=true",
-    "ProtectSystem=strict", "ProtectHome=true", "ReadWritePaths=/var/lib/lama -/mnt/lama-sauvegarde",
+    "ProtectSystem=strict", "ProtectHome=true", "ReadWritePaths=/var/lib/lama -/mnt",
     "KillSignal=SIGTERM", "WorkingDirectory=/opt/lama/actuelle",
     "Environment=RCLONE_CONFIG=/var/lib/lama/rclone/rclone.conf", "Environment=HOME=/var/lib/lama",
     "ExecStart=/usr/bin/node /opt/lama/actuelle/dist-server/main.mjs", "WantedBy=multi-user.target",
@@ -1355,4 +1355,18 @@ test("vérification à la main : clé en service, autre clé, dossier modifié, 
   const sansCle = majFonction("controle_signature", [ancienne, "1.3.0", join(ancienne, "absente.pem"), "0"], vars);
   assert.equal(sansCle.code, 0, sansCle.erreur);
   assert.match(sansCle.erreur, /La version en service n'a pas de clé publique/);
+});
+
+test("services : aucun cloisonnement ne désigne le point de montage du disque, absent il bloquerait le démarrage (systemd 259, Ubuntu 26.04)", () => {
+  for (const name of readdirSync(join(DEPLOY, "systemd")).filter((n) => n.endsWith(".service"))) {
+    const unit = read(`systemd/${name}`);
+    assert.doesNotMatch(unit, /^(ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|BindPaths|BindReadOnlyPaths)=.*\/mnt\/lama-sauvegarde/m, name);
+  }
+});
+
+test("installation : avahi relancé après le changement de nom, sinon il annonce encore l'ancien (Ubuntu 26.04)", () => {
+  const s = read("installer.sh");
+  const nom = s.indexOf('hostnamectl set-hostname "$NOM_RESEAU"');
+  const relance = s.indexOf("systemctl restart avahi-daemon");
+  assert.ok(nom > 0 && relance > nom, "restart d'avahi après hostnamectl");
 });

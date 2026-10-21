@@ -510,7 +510,7 @@ test("unités : service root oneshot, lancé par le fichier de demande et chaque
 
 test("droits : le service lama inchangé, aucune règle polkit ni sudoers nouvelle (M-7)", () => {
   const lama = lire("systemd/lama.service");
-  for (const ligne of ["User=lama", "NoNewPrivileges=true", "ProtectSystem=strict", "ReadWritePaths=/var/lib/lama -/mnt/lama-sauvegarde", "ReadOnlyPaths=/etc/lama"]) assert.ok(lama.includes(`${ligne}\n`), ligne);
+  for (const ligne of ["User=lama", "NoNewPrivileges=true", "ProtectSystem=strict", "ReadWritePaths=/var/lib/lama -/mnt", "ReadOnlyPaths=/etc/lama"]) assert.ok(lama.includes(`${ligne}\n`), ligne);
   assert.deepEqual(readdirSync(join(DEPLOY, "polkit")), ["50-lama-heure.rules"]);
   for (const nom of readdirSync(DEPLOY).filter((n) => n.endsWith(".sh"))) assert.doesNotMatch(lire(nom), /sudoers|NOPASSWD/, nom);
 });

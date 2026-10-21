@@ -30,8 +30,9 @@ ReadOnlyPaths=/etc/lama-formation
 # /etc/lama remplacé par un dossier vide, sauf le certificat : ni la clé maîtresse ni la clé de sauvegarde de la vraie base.
 TemporaryFileSystem=/etc/lama:ro
 BindReadOnlyPaths=/etc/lama/tls
-# Vraie base et disque de sauvegarde hors d'atteinte, quoi que fasse le programme.
-InaccessiblePaths=/var/lib/lama -/mnt/lama-sauvegarde
+# Vraie base et disque de sauvegarde hors d'atteinte, quoi que fasse le programme. /mnt entier :
+# disque absent, /mnt/lama-sauvegarde empêcherait le démarrage sous systemd 259 (Ubuntu 26.04).
+InaccessiblePaths=/var/lib/lama -/mnt
 
 [Install]
 WantedBy=multi-user.target

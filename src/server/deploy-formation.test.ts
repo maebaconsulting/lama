@@ -53,7 +53,7 @@ test("unité lama-formation : compte propre, LAMA_FORMATION=1, port sans privil�
     "Environment=HOME=/var/lib/lama-formation", "ExecStart=/usr/bin/node /opt/lama/actuelle/dist-server/main.mjs",
     "WorkingDirectory=/opt/lama/actuelle", "Restart=always", "UMask=0077", "CapabilityBoundingSet=", "NoNewPrivileges=true",
     "ProtectSystem=strict", "ProtectHome=true", "ReadWritePaths=/var/lib/lama-formation", "ReadOnlyPaths=/etc/lama-formation",
-    "TemporaryFileSystem=/etc/lama:ro", "BindReadOnlyPaths=/etc/lama/tls", "InaccessiblePaths=/var/lib/lama -/mnt/lama-sauvegarde",
+    "TemporaryFileSystem=/etc/lama:ro", "BindReadOnlyPaths=/etc/lama/tls", "InaccessiblePaths=/var/lib/lama -/mnt",
     "WantedBy=multi-user.target",
   ]) assert.match(unit, new RegExp(`^${line.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`, "m"), line);
   assert.doesNotMatch(unit, /AmbientCapabilities|CAP_NET_BIND_SERVICE|RCLONE_CONFIG/, "port 8443 sans privilège, aucun Google Drive");
