@@ -23,6 +23,7 @@ import type { LinkedSession, WhatsappProvider } from "./fournisseur.ts";
 import { DOCUMENT_KINDS, queueDocumentMessage, type DocumentRefusal } from "./documents.ts";
 import { smsProviderFromSettings } from "../sms/passerelle.ts";
 import { smsFetchOf } from "../sms/routes.ts";
+import { mountMetaRoutes } from "./routes-meta.ts";
 import { normalizePhone } from "./numeros.ts";
 import { productDraft, queueProductMessage, type ProductRefusal } from "./produit.ts";
 import { readMessageSettings } from "./rendez-vous.ts";
@@ -77,7 +78,8 @@ export function mountWhatsappRoutes(app: OpenAPIHono<any>): void { // eslint-dis
   app.get("/api/whatsapp/status", async (c) => {
     const provider = await providerFromSettings(fetchOf(c));
     if (!provider) return c.json({ provider: "aucun" });
-    return c.json({ provider: "waha", ...(await provider.status()) });
+    const name = (await getSetting<string>("whatsapp.fournisseur")) === "meta" ? "meta" : "waha";
+    return c.json({ provider: name, ...(await provider.status()) });
   });
 
   const session = (command: "start" | "logout") => async (c: Ctx) => {
@@ -271,4 +273,6 @@ export function mountWhatsappRoutes(app: OpenAPIHono<any>): void { // eslint-dis
     await logAudit({ accountId: account.id, action: "whatsapp.produit", target: result.draft.productName, ip: clientIp(c), now });
     return c.json({ ok: true });
   });
+
+  mountMetaRoutes(app);
 }

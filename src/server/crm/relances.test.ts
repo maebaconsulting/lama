@@ -202,3 +202,13 @@ test("mini CRM désactivé : aucune relance mise en file, même cases cochées ;
   set("crm.active", true);
   assert.equal(await runRelances(storage, at(DAY, "11:00")), 2);
 });
+
+test("relance enrichie (WhatsApp Business, W-2) : modèle de la relance, valeurs de la cliente et de l'institut", async () => {
+  const { db, storage, payloads } = setup();
+  db.exec("UPDATE clients SET birthday = '10-04' WHERE id = 1");
+  assert.equal(await runRelances(storage, at(DAY, "10:00")), 1);
+  const [m] = payloads();
+  assert.equal(m.modele, "anniversaire");
+  assert.deepEqual(m.valeurs, { prenom: "Aïcha", nom: "Aïcha Mbarga", institut: "Institut Ébène", telephone: "" });
+  assert.equal(m.text, "Bon anniversaire, Aïcha. Institut Ébène vous souhaite une très belle journée.");
+});

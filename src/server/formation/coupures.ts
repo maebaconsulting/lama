@@ -23,6 +23,8 @@ const COUPEES: { method: string; path: RegExp }[] = [
   { method: "POST", path: /^\/api\/whatsapp\/session\/(start|logout)\/?$/ },
   { method: "GET", path: /^\/api\/whatsapp\/qr\/?$/ },
   { method: "POST", path: /^\/api\/sms\/test\/?$/ },
+  // WhatsApp Business : test de connexion, message d'essai et vérification des modèles parlent à Meta.
+  { method: "POST", path: /^\/api\/whatsapp\/meta\/(tester|essai|modeles\/verifier)\/?$/ },
   // « Ouvrir WhatsApp » ou « Ouvrir les SMS » : la tablette enverrait elle-même le message à un numéro peut-être réel.
   { method: "POST", path: /^\/api\/whatsapp\/manual\/[^/]+\/open\/?$/ },
   // Mise à jour par le réseau (M-16) : la formation suit la version du service principal, sans rubrique.

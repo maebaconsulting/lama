@@ -5,6 +5,7 @@
  */
 import { get, run } from "@clawnify/db";
 import type { ImageType } from "../images.ts";
+import type { DocumentFile } from "../whatsapp/fournisseur.ts";
 import { decodeImage, packPrintImage, toPrintImage } from "../impression/image-logo.ts";
 
 export type LogoVariant = "clair" | "sombre";
@@ -15,6 +16,12 @@ export type LogoType = ImageType;
 export async function readLogo(variant: LogoVariant): Promise<{ type: LogoType; bytes: Buffer; version: number } | null> {
   const row = await get<{ type: LogoType; octets: Uint8Array; version: number }>("SELECT type, octets, version FROM institut_logos WHERE variante = ?", [variant]);
   return row ? { type: row.type, bytes: Buffer.from(row.octets), version: row.version } : null;
+}
+
+/** Logo de l'institut en pièce jointe (en-tête image d'un produit sans photo, WhatsApp Business W-17) : le clair, sinon le sombre. */
+export async function logoForMessage(): Promise<DocumentFile | null> {
+  const logo = (await readLogo("clair")) ?? (await readLogo("sombre"));
+  return logo ? { name: `logo.${logo.type === "image/png" ? "png" : "jpg"}`, mime: logo.type, data: logo.bytes } : null;
 }
 
 export async function logoVersions(): Promise<{ clair: number | null; sombre: number | null }> {

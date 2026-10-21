@@ -24,6 +24,7 @@ import curseurRef from "./migrations/022_curseur_ref.ts";
 import prenomEnLigne from "./migrations/023_prenom_en_ligne.ts";
 import supplements from "./migrations/024_supplements.ts";
 import miseAJour from "./migrations/025_mise_a_jour.ts";
+import whatsappMeta from "./migrations/026_whatsapp_meta.ts";
 
 export const MIGRATIONS: { id: string; sql: string }[] = [
   { id: "001_base", sql: base },
@@ -51,6 +52,7 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
   { id: "023_prenom_en_ligne", sql: prenomEnLigne },
   { id: "024_supplements", sql: supplements },
   { id: "025_mise_a_jour", sql: miseAJour },
+  { id: "026_whatsapp_meta", sql: whatsappMeta },
 ];
 
 /**

@@ -125,6 +125,34 @@ The installation also sets up the WAHA WhatsApp gateway: Ubuntu's Docker, then a
 
 If the WhatsApp step fails (no internet, image not found), the application keeps running without automatic sending: fix the problem, then run `sudo ./deploy/installer.sh` again from the folder of the running version. Container state: `sudo docker ps`, log: `sudo docker logs lama-waha`.
 
+With an official WhatsApp Business account, WAHA is not needed: see the next section.
+
+## WhatsApp Business
+
+WhatsApp Business is Meta's official API: messages leave from Meta's servers, with no linked phone and no gateway on the institute's server, and the number is not at risk of suspension as with WAHA. It needs a WhatsApp Business account opened with Meta and approved message templates. Each institute chooses one provider or the other; WAHA stays available for institutes without an official account.
+
+### At Meta
+
+1. Verified business: in Meta's business manager (business.facebook.com), Business settings, Security centre, complete the business verification of the institute (legal name, address, official document).
+2. App: on developers.facebook.com, create an app of type Business linked to this business manager, then add the WhatsApp product to it.
+3. Number: in WhatsApp Manager, register the institute's number on the API, preferably in coexistence mode ("connect the existing WhatsApp Business app"): the WhatsApp Business app on the phone keeps working, and the team reads and handles client replies there. Without coexistence, client replies no longer reach the phone, and lama does not receive them yet. Coexistence is to be confirmed for Cameroon at registration time.
+4. System user and token: Business settings, Users, System users, add an admin system user, assign it the app and the WhatsApp Business account, then generate a permanent access token (expiry "Never") with the `whatsapp_business_messaging` and `whatsapp_business_management` permissions. Copy the token at once: Meta shows it only once.
+5. IDs: in the app, WhatsApp, API Setup, note the Phone number ID and the WhatsApp Business account ID (digits).
+
+### In lama
+
+1. Settings, Connections, WhatsApp (administrator): choose "WhatsApp Business, official Meta API", enter the Phone number ID, the WhatsApp Business account ID and the permanent access token, then Save (password asked again). The token is never shown again: leave the field empty to keep it.
+2. "Test the connection": lama shows the number, the verified business name and the quality rating; otherwise the reason (token refused or expired, unknown ID, Meta unreachable).
+3. Templates: for each message type, "Show the text to register" gives the name, category, header, the body with `{{1}}`, `{{2}}`… and a sample for each variable, in French and English. In WhatsApp Manager, Message templates, create each template with this name, this category, the language French (`fr`) then English (`en`), the header shown (document for the receipt, image for the recommended product), the body copied as is and the samples. A name already taken at Meta can be changed in lama, then "Save the names".
+4. Once the templates are approved (from a few minutes to a few days): "Check templates" updates their status, then "Send a test message" to a team phone.
+
+### Good to know
+
+- A message without a template (free message written from a client's record) is accepted by Meta only within the 24-hour window after the client's last message; outside this window, it goes by backup SMS or to "To send by hand".
+- Marketing messages (recommended product, birthday, "We miss you", campaign) are charged to the institute by Meta, and only for clients who agreed to receive them. The follow-up switch stays with the manager, off by default.
+- Meta limits the number of messages per day from a new number; the limit rises with quality. A message refused for this reason is retried by the sending queue.
+- Delivery and read receipts, and client replies, do not reach lama yet.
+
 ## Receipt printer
 
 lama prints receipts directly on an 80 mm thermal printer connected to the institute's network (ESC/POS, port 9100), for example a NETUM NS-8360LW.

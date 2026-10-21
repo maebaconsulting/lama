@@ -4,7 +4,7 @@ import { useCrm } from "../../auth-context";
 import { useFormation } from "../../formation-context";
 import type { Setting } from "../../lib/api-types";
 import { changedKeysIn, rebase, valuesOf } from "../../lib/reglages";
-import type { WhatsappText } from "../../lib/whatsapp";
+import type { WhatsappStatus, WhatsappText } from "../../lib/whatsapp";
 import { estimateTemplate } from "../../../shared/sms";
 import { useLoad } from "../../hooks/use-load";
 import { useEnvoi } from "../../hooks/use-envoi";
@@ -77,6 +77,8 @@ export function Whatsapp() {
   // Interrupteur général du mini CRM : désactivé, relances et campagnes cèdent la place à une phrase.
   const crm = useCrm();
   const texts = useLoad(() => api<{ texts: WhatsappText[] }>("GET", "/api/whatsapp/texts"), ["settings"]);
+  // WhatsApp Business (W-15) : la cliente reçoit le modèle déposé chez Meta, pas ces textes.
+  const status = useLoad(() => api<WhatsappStatus>("GET", "/api/whatsapp/status"), ["settings"]);
   const settings = useLoad(() => api<{ settings: Setting[] }>("GET", "/api/settings"), ["settings"]);
   const [baseline, setBaseline] = useState<Record<string, string> | null>(null);
   const [form, setForm] = useState<Record<string, string> | null>(null);
@@ -134,6 +136,7 @@ export function Whatsapp() {
 
       <Bloc titre={t("whatsapp.textes")}>
         <p className="max-w-prose text-sm text-encre-grise">{t("whatsapp.textes_aide")}</p>
+        {status.data?.provider === "meta" && <p className="max-w-prose text-sm text-encre-grise">{t("whatsapp.textes_meta")}</p>}
         <Erreur message={texts.error} />
         <div className="grid max-w-2xl gap-6">
           {texts.data?.texts.map((text) => <Texte key={text.key} text={text} onSaved={texts.reload} />)}

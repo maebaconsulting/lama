@@ -77,7 +77,8 @@ test("réglages du fournisseur : valeurs contrôlées", async (t) => {
   const ctx = await setupApp(t);
   const admin = await ctx.as("admin");
   await admin("POST", "/api/auth/confirm", { password: "mot-de-passe-test" });
-  assert.equal((await admin("PUT", "/api/settings/whatsapp.fournisseur", { value: "meta" })).status, 400, "API Meta : vague 3");
+  assert.equal((await admin("PUT", "/api/settings/whatsapp.fournisseur", { value: "graph" })).status, 400, "fournisseur inconnu");
+  assert.equal((await admin("PUT", "/api/settings/whatsapp.fournisseur", { value: "meta" })).status, 200, "WhatsApp Business (spec du 21/10/2026, W-1)");
   assert.equal((await admin("PUT", "/api/settings/whatsapp.fournisseur", { value: "waha" })).status, 200);
   assert.equal((await admin("PUT", "/api/settings/waha.adresse", { value: "ftp://x" })).status, 400);
   assert.equal((await admin("PUT", "/api/settings/waha.adresse", { value: "http://127.0.0.1:3000" })).status, 200);

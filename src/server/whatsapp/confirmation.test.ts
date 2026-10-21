@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { initDB } from "@clawnify/db";
 import { setupApp, type TestApp } from "../test-support.ts";
 import { runReminders } from "./rappels.ts";
+import { DEFAULT_TEXTS, renderTemplate } from "./textes.ts";
 
 /** Confirmation à la création et au déplacement d'un rendez-vous, dans la même transaction (sous-projet 7 § 3). */
 
@@ -164,4 +165,15 @@ test("rendez-vous restauré : rien pour une cliente décochée, ni pour un rende
   await g("PUT", `/api/clients/${clientId}`, { channel: "none" });
   await g("PUT", `/api/appointments/${id}`, { status: "confirmed" });
   assert.deepEqual(rows(ctx).map((r) => r.dedupe_key), [`wa:rappel:${id}:2026-10-05 10:00`], "cliente décochée : rien, et le rappel envoyé reste");
+});
+
+test("message enrichi (WhatsApp Business, W-2) : modèle et valeurs nommées écrits avec le texte, qui reste celui de la gérante", async (t) => {
+  const { ctx, book } = await scene(t);
+  await book("2026-10-05", "10:00");
+  const payload = JSON.parse(rows(ctx)[0].payload);
+  assert.equal(payload.modele, "confirmation");
+  const { praticienne, ...autres } = payload.valeurs;
+  assert.deepEqual(autres, { prenom: "Aïcha", nom: "Aïcha Mbarga", date: "lundi 5 octobre", heure: "10:00", prestation: "Tresses", institut: "Institut Ébène", telephone: "699 00 00 00" });
+  assert.equal(typeof praticienne, "string");
+  assert.equal(renderTemplate(DEFAULT_TEXTS.confirmation.fr, payload.valeurs), payload.text, "WAHA et le SMS reçoivent le même texte qu'avant");
 });

@@ -41,7 +41,7 @@ test("022 : base en service, curseur gardé sans référence : le premier tour l
   db.exec("PRAGMA foreign_keys = ON");
   runMigrations(db, MIGRATIONS.slice(0, MIGRATIONS.findIndex((m) => m.id === "022_curseur_ref")));
   db.exec("UPDATE en_ligne_etat SET curseur = '000000000042'");
-  assert.deepEqual(runMigrations(db), ["022_curseur_ref", "023_prenom_en_ligne", "024_supplements", "025_mise_a_jour"]);
+  assert.deepEqual(runMigrations(db), ["022_curseur_ref", "023_prenom_en_ligne", "024_supplements", "025_mise_a_jour", "026_whatsapp_meta"]);
   assert.deepEqual({ ...(db.prepare("SELECT curseur, curseur_ref FROM en_ligne_etat").get() as object) }, { curseur: "000000000042", curseur_ref: null });
 });
 
@@ -52,6 +52,6 @@ test("023 : base en service, demandes déjà reçues sans prénom", () => {
   db.exec("INSERT INTO staff (id, name) VALUES (1, 'Awa')");
   db.exec("INSERT INTO services (id, name) VALUES (1, 'Soin visage')");
   const id = insererDemande(db, { contrat_id: "d_ancienne" });
-  assert.deepEqual(runMigrations(db), ["023_prenom_en_ligne", "024_supplements", "025_mise_a_jour"]);
+  assert.deepEqual(runMigrations(db), ["023_prenom_en_ligne", "024_supplements", "025_mise_a_jour", "026_whatsapp_meta"]);
   assert.equal((db.prepare("SELECT cliente_prenom FROM demandes_en_ligne WHERE id = ?").get(id) as { cliente_prenom: string | null }).cliente_prenom, null);
 });

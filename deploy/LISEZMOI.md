@@ -125,6 +125,34 @@ L'installation pose aussi la passerelle WhatsApp WAHA : Docker d'Ubuntu, puis u
 
 Si l'étape WhatsApp échoue (pas d'internet, image introuvable), l'application reste en service sans envoi automatique : régler le problème puis relancer `sudo ./deploy/installer.sh` depuis le dossier de la version en service. État du conteneur : `sudo docker ps`, journal : `sudo docker logs lama-waha`.
 
+Avec un compte WhatsApp Business officiel, WAHA n'est pas nécessaire : voir la section suivante.
+
+## WhatsApp Business
+
+WhatsApp Business est l'API officielle de Meta : les messages partent depuis les serveurs de Meta, sans téléphone lié ni passerelle sur le serveur de l'institut, et le numéro ne risque pas d'être suspendu comme avec WAHA. Il faut un compte WhatsApp Business ouvert chez Meta et des modèles de messages approuvés. Chaque institut choisit l'un ou l'autre fournisseur ; WAHA reste en place pour les instituts sans compte officiel.
+
+### Chez Meta
+
+1. Entreprise vérifiée : dans le gestionnaire d'entreprise de Meta (business.facebook.com), Paramètres de l'entreprise, Centre de sécurité, faire vérifier l'entreprise de l'institut (nom légal, adresse, document officiel).
+2. Application : sur developers.facebook.com, créer une application de type Entreprise reliée à ce gestionnaire, puis lui ajouter le produit WhatsApp.
+3. Numéro : dans le gestionnaire WhatsApp, inscrire le numéro de l'institut sur l'API, de préférence en mode coexistence (« connecter l'application WhatsApp Business existante ») : l'application WhatsApp Business du téléphone reste en service, et l'équipe y lit et traite les réponses des clientes. Sans coexistence, les réponses des clientes n'arrivent plus sur le téléphone, et lama ne les reçoit pas encore. La coexistence est à confirmer pour le Cameroun au moment de l'inscription.
+4. Utilisateur système et jeton : Paramètres de l'entreprise, Utilisateurs, Utilisateurs système, ajouter un utilisateur système administrateur, lui attribuer l'application et le compte WhatsApp Business, puis générer un jeton d'accès permanent (expiration « Jamais ») avec les autorisations `whatsapp_business_messaging` et `whatsapp_business_management`. Copier le jeton tout de suite : Meta ne le montre qu'une fois.
+5. Identifiants : dans l'application, WhatsApp, Configuration de l'API, relever l'Identifiant du numéro de téléphone et l'Identifiant du compte WhatsApp Business (des chiffres).
+
+### Dans lama
+
+1. Réglages, Connexions, WhatsApp (administrateur) : choisir « WhatsApp Business, API officielle de Meta », saisir l'Identifiant du numéro de téléphone, l'Identifiant du compte WhatsApp Business et le jeton d'accès permanent, puis Enregistrer (mot de passe redemandé). Le jeton n'est jamais réaffiché : laisser le champ vide pour le garder.
+2. « Tester la connexion » : lama affiche le numéro, le nom vérifié de l'entreprise et la note de qualité ; sinon le motif (jeton refusé ou expiré, identifiant inconnu, Meta injoignable).
+3. Modèles : pour chaque type de message, « Voir le texte à déposer » donne le nom, la catégorie, l'en-tête, le corps avec `{{1}}`, `{{2}}`… et un exemple pour chaque variable, en français et en anglais. Dans le gestionnaire WhatsApp, Modèles de message, créer chaque modèle avec ce nom, cette catégorie, la langue Français (`fr`) puis Anglais (`en`), l'en-tête indiqué (document pour le ticket, image pour le produit recommandé), le corps copié tel quel et les exemples. Un nom déjà pris chez Meta peut être changé dans lama, puis « Enregistrer les noms ».
+4. Une fois les modèles approuvés (de quelques minutes à quelques jours) : « Vérifier les modèles » met à jour leur état, puis « Envoyer un message d'essai » vers un téléphone de l'équipe.
+
+### À savoir
+
+- Un message sans modèle (message libre écrit depuis la fiche d'une cliente) n'est accepté par Meta que dans la fenêtre de 24 h qui suit le dernier message de la cliente ; hors de cette fenêtre, il part par SMS de secours ou va dans « À envoyer à la main ».
+- Les messages marketing (produit recommandé, anniversaire, « Vous nous manquez », campagne) sont facturés par Meta à l'institut, et réservés aux clientes qui ont accepté d'en recevoir. L'interrupteur des relances reste à la gérante, désactivé par défaut.
+- Meta limite le nombre de messages par jour d'un nouveau numéro ; la limite monte avec la qualité. Un envoi refusé pour cette raison est réessayé par la file d'envoi.
+- Les accusés de remise et de lecture, et les réponses des clientes, ne remontent pas encore dans lama.
+
 ## Imprimante de tickets
 
 lama imprime directement les tickets sur une imprimante thermique de 80 mm branchée au réseau de l'institut (ESC/POS, port 9100), par exemple une NETUM NS-8360LW.

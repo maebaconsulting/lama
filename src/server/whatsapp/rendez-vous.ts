@@ -9,7 +9,7 @@ import { getSetting } from "../settings.ts";
 import type { Database } from "../storage.ts";
 import { WHATSAPP_KIND, type WhatsappMessage } from "./envoi.ts";
 import { appointmentAt, normalizePhone, silenceEnd } from "./numeros.ts";
-import { firstName, formatDay, renderTemplate, textSetting, TEMPLATE_KINDS, type TemplateKind } from "./textes.ts";
+import { firstName, formatDay, renderTemplate, textSetting, TEMPLATE_KINDS, type TemplateKind, type ValeursModele } from "./textes.ts";
 
 /** Réglages lus avant la transaction (lecture asynchrone, secrets compris), passés aux fonctions synchrones. */
 export interface MessageSettings {
@@ -71,7 +71,7 @@ export function appointmentMessage(db: Database, s: MessageSettings, kind: Natur
     "SELECT sv.name, sv.name_en FROM appointment_services aps JOIN services sv ON sv.id = aps.service_id WHERE aps.appointment_id = ? ORDER BY aps.id",
   ).all(appointmentId) as { name: string; name_en: string }[];
   const time = row.start_time.slice(0, 5);
-  const text = renderTemplate(s.texts[kind][lang], {
+  const valeurs: ValeursModele = {
     prenom: firstName(row.name),
     nom: row.name.trim(),
     date: formatDay(row.scheduled_date, lang),
@@ -80,7 +80,8 @@ export function appointmentMessage(db: Database, s: MessageSettings, kind: Natur
     institut: s.institut,
     telephone: s.telephone,
     praticienne: firstName(row.staff_name),
-  });
+  };
+  const text = renderTemplate(s.texts[kind][lang], valeurs);
   const at = appointmentAt(row.scheduled_date, time);
   // Transfert : une clé par praticienne et par écriture (aller-retour A → B → A, comme la confirmation).
   const dedupeKey = kind === "confirmation" ? `wa:confirmation:${row.id}:${row.scheduled_date} ${time}:${now}`
@@ -88,7 +89,7 @@ export function appointmentMessage(db: Database, s: MessageSettings, kind: Natur
     : `wa:rappel:${row.id}:${row.scheduled_date} ${time}`;
   const origin = { type: kind, appointmentId: row.id, clientId: row.client_id, at, ...(kind === "transfert" ? { staffId: row.staff_id! } : {}) };
   return {
-    message: { to: normalizePhone(row.phone ?? "", s.indicatif) ?? "", lang, text, origin },
+    message: { to: normalizePhone(row.phone ?? "", s.indicatif) ?? "", lang, text, modele: kind, valeurs, origin },
     dedupeKey,
     at,
   };

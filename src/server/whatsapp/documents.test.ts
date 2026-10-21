@@ -49,6 +49,8 @@ test("« Envoyer par WhatsApp » sur une facture, un avoir, un reçu : mis en fi
   assert.deepEqual(JSON.parse(all[0].payload), {
     to: "237699123456", lang: "fr",
     text: `Bonjour Aïcha, voici votre ticket ${kept.number} de Institut Ébène. Merci de votre confiance\u00a0!`,
+    modele: "ticket",
+    valeurs: { prenom: "Aïcha", nom: "Aïcha Mbarga", document: `ticket ${kept.number}`, institut: "Institut Ébène", telephone: "" },
     document: { kind: "invoice", id: kept.id }, origin: { type: "ticket", clientId: client },
   });
   assert.match(JSON.parse(all[3].payload).text, new RegExp(`reçu d'acompte ${deposit.number}`));

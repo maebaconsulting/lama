@@ -12,7 +12,7 @@ import type { Database } from "../storage.ts";
 import { WHATSAPP_KIND, type WhatsappMessage } from "./envoi.ts";
 import { normalizePhone } from "./numeros.ts";
 import type { MessageSettings } from "./rendez-vous.ts";
-import { documentLabel, firstName, renderTemplate, type DocumentKind } from "./textes.ts";
+import { documentLabel, firstName, renderTemplate, type DocumentKind, type ValeursModele } from "./textes.ts";
 
 export const DOCUMENT_KINDS: DocumentKind[] = ["invoice", "credit", "deposit"];
 
@@ -51,15 +51,16 @@ export function queueDocumentMessage(
   const to = normalizePhone(client.phone ?? "", s.indicatif) ?? "";
   if (!to && opts.strict) return { ok: false, refusal: "numero_invalide" };
   const lang: Lang = client.language === "fr" || client.language === "en" ? client.language : s.lang;
-  const text = renderTemplate(s.texts.ticket[lang], {
+  const valeurs: ValeursModele = {
     prenom: firstName(client.name), nom: client.name.trim(), document: documentLabel(doc.kind, facts.number, lang), institut: s.institut, telephone: s.telephone,
-  });
+  };
+  const text = renderTemplate(s.texts.ticket[lang], valeurs);
   const prefix = `wa:ticket:${doc.kind}:${doc.id}:`;
   // Numéro suivant le plus grand déjà pris (pas le nombre de lignes : les envois partis sont purgés après
   // 90 jours, les échecs restent, un compte retomberait sur un numéro pris et l'envoi serait ignoré sans bruit).
   const last = (db.prepare("SELECT MAX(CAST(substr(dedupe_key, ?) AS INTEGER)) AS n FROM outbox WHERE dedupe_key LIKE ?")
     .get(prefix.length + 1, `${prefix}%`) as { n: number | null }).n ?? 0;
-  const message: WhatsappMessage = { to, lang, text, document: { kind: doc.kind, id: doc.id }, origin: { type: "ticket", clientId: client.id } };
+  const message: WhatsappMessage = { to, lang, text, modele: "ticket", valeurs, document: { kind: doc.kind, id: doc.id }, origin: { type: "ticket", clientId: client.id } };
   enqueueSync(db, { kind: WHATSAPP_KIND, payload: message, dedupeKey: `${prefix}${last + 1}`, createdBy: opts.createdBy, now: opts.now });
   return { ok: true, number: facts.number };
 }

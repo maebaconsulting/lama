@@ -26,6 +26,10 @@ export const CLIENT_VARIABLES = ["prenom", "nom", "institut", "telephone"] as co
 /** Variables du message de transfert (spec du 04/10/2026, décision 11) : celles d'une confirmation, plus la praticienne. */
 export const TRANSFER_VARIABLES = [...VARIABLES, "praticienne"] as const;
 export type Variable = (typeof VARIABLES)[number] | (typeof TICKET_VARIABLES)[number] | (typeof PRODUCT_VARIABLES)[number] | "praticienne";
+/** Variables d'un modèle de Meta (WhatsApp Business, W-2, W-3) : celles des textes, plus `{texte}`, le texte d'une campagne déjà rendu pour la cliente. */
+export type VariableModele = Variable | "texte";
+/** Valeurs nommées d'un message, écrites par chaque producteur avec le texte final (W-2). */
+export type ValeursModele = Partial<Record<VariableModele, string>>;
 /** Variables de l'accusé d'une demande de rappel en ligne : la cliente, l'institut et la prestation. */
 export const ONLINE_CALLBACK_VARIABLES = [...CLIENT_VARIABLES, "prestation"] as const;
 export type TemplateKind = "confirmation" | "rappel" | "ticket" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert"
@@ -133,9 +137,9 @@ export function templateProblem(value: unknown, kind: TemplateKind = "confirmati
 }
 
 /** Texte final : variables remplacées, sans double espace laissé par une variable vide. */
-export function renderTemplate(template: string, values: Partial<Record<Variable, string>>): string {
+export function renderTemplate(template: string, values: ValeursModele): string {
   return template
-    .replace(/\{(\w+)\}/g, (whole, name: string) => (Object.hasOwn(values, name) ? values[name as Variable]! : whole))
+    .replace(/\{(\w+)\}/g, (whole, name: string) => (Object.hasOwn(values, name) ? values[name as VariableModele]! : whole))
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+,/g, ",")
     .trim();

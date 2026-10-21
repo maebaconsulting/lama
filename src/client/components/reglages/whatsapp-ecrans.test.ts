@@ -13,7 +13,7 @@ test("Connexions (administrateur) : fournisseur, risque de WAHA en une phrase, c
   assert.match(connexions, /<FournisseurWhatsapp \/>\s*<EtatWhatsapp \/>/);
   assert.doesNotMatch(connexions, /whatsapp_a_venir/);
   const fournisseur = read("./fournisseur-whatsapp.tsx");
-  assert.match(fournisseur, /aria-describedby="whatsapp-risque"/);
+  assert.match(fournisseur, /aria-describedby=\{waha \? "whatsapp-risque" : undefined\}/);
   assert.match(fournisseur, /t\("whatsapp\.risque"\)/);
   assert.match(fournisseur, /type="password"/);
   assert.match(fournisseur, /if \(cle\.trim\(\)\) writes\.push\(\["waha\.cle", cle\.trim\(\)\]\);/, "clé vide : gardée");
@@ -92,4 +92,31 @@ test("rubrique Messages : blocs « Relances » et « Campagnes » (mini CRM)", (
   assert.match(relances, /<Case id="relances-absence"/);
   const campagnes = read("./campagnes.tsx");
   assert.match(campagnes, /api<\{ campaigns: CampaignRow\[\] \}>\("GET", "\/api\/campaigns"\), \["outbox"\]/, "rechargée quand la file change");
+});
+
+test("WhatsApp Business (administrateur, W-9 à W-14) : choix du fournisseur, aide, identifiants, jeton jamais relu, test, essai et modèles", () => {
+  const fournisseur = read("./fournisseur-whatsapp.tsx");
+  assert.match(fournisseur, /<option value="meta">\{t\("whatsapp\.fournisseur\.meta"\)\}<\/option>/);
+  assert.match(fournisseur, /\{meta && \(\s*<>\s*<AideMeta \/>/, "aide en tête du bloc");
+  assert.match(fournisseur, /\{waha && <p id="whatsapp-risque"[^>]*>\{t\("whatsapp\.risque"\)\}<\/p>\}/, "le risque de WAHA ne s'affiche que pour WAHA");
+  assert.match(fournisseur, /aria-describedby=\{waha \? "whatsapp-risque" : undefined\}/, "description liée seulement si le paragraphe existe");
+  assert.match(fournisseur, /if \(jeton\.trim\(\)\) writes\.push\(\["whatsapp\.jeton_acces", jeton\.trim\(\)\]\);/, "jeton vide : gardé");
+  assert.match(fournisseur, /<Champ id="meta-jeton" type="password"/);
+  assert.doesNotMatch(fournisseur, /form\["whatsapp\.jeton_acces"\]/, "le jeton n'est jamais relu dans un champ");
+  assert.match(fournisseur, /\{baseline\["whatsapp\.fournisseur"\] === "meta" && <WhatsappBusiness \/>\}/, "test, essai et modèles une fois le choix enregistré");
+  const bloc = read("./whatsapp-business.tsx");
+  assert.match(bloc, /api<ConnexionMeta>\("POST", "\/api\/whatsapp\/meta\/tester"\)/);
+  assert.match(bloc, /api\("POST", "\/api\/whatsapp\/meta\/essai", \{ to: essaiTo \}\)/);
+  assert.match(bloc, /api<ModelesMeta>\("POST", "\/api\/whatsapp\/meta\/modeles\/verifier"\)/);
+  assert.match(bloc, /await confirm\(\(\) => api\("PUT", "\/api\/settings\/whatsapp\.meta\.noms", \{ value: noms \}\)\)/, "mot de passe redemandé");
+  assert.match(bloc, /navigator\.clipboard\.writeText\(depot\.corps\)/);
+  assert.match(bloc, /t\("whatsapp\.meta\.avertissement_marketing"\)/);
+  assert.match(bloc, /href=\{GUIDE_META\[lang\]\}/);
+  assert.doesNotMatch(bloc, /graph\.facebook\.com/, "le navigateur ne parle jamais à Meta");
+});
+
+test("textes de la gérante (W-15) : avec WhatsApp Business, la cliente reçoit le modèle déposé chez Meta", () => {
+  const rubrique = read("./whatsapp.tsx");
+  assert.match(rubrique, /api<WhatsappStatus>\("GET", "\/api\/whatsapp\/status"\)/);
+  assert.match(rubrique, /\{status\.data\?\.provider === "meta" && <p className="max-w-prose text-sm text-encre-grise">\{t\("whatsapp\.textes_meta"\)\}<\/p>\}/);
 });

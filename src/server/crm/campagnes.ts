@@ -88,8 +88,10 @@ export function createCampaign(db: Database, s: MessageSettings, input: Campaign
   const quietUntil = silenceEnd(opts.now, s.silenceStart, s.silenceEnd);
   for (const r of audience.recipients) {
     const english = r.lang === "en" && input.textEn !== "";
-    const text = renderTemplate(english ? input.textEn : input.textFr, { prenom: firstName(r.name), nom: r.name.trim(), institut: s.institut, telephone: s.telephone });
-    const message: WhatsappMessage = { to: r.to, lang: english ? "en" : "fr", text, origin: { type: "campagne", clientId: r.id, campaignId: id } };
+    const client = { prenom: firstName(r.name), nom: r.name.trim(), institut: s.institut, telephone: s.telephone };
+    const text = renderTemplate(english ? input.textEn : input.textFr, client);
+    // Meta : le texte rendu pour la cliente prend place dans le modèle « campagne » (W-3).
+    const message: WhatsappMessage = { to: r.to, lang: english ? "en" : "fr", text, modele: "campagne", valeurs: { ...client, texte: text }, origin: { type: "campagne", clientId: r.id, campaignId: id } };
     enqueueSync(db, { kind: WHATSAPP_KIND, payload: message, dedupeKey: `wa:campagne:${id}:${r.id}`, createdBy: opts.accountId, now: opts.now, notBefore: quietUntil ?? undefined });
   }
   return { id, tag, recipients: audience.recipients.length, excluded: audience.excluded };

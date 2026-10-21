@@ -14,9 +14,11 @@ import { PermanentError, TemporaryError, type Throttle } from "../outbox/outbox.
 import { readProductPhoto } from "../produits/images.ts";
 import { crmActive, getSetting } from "../settings.ts";
 import type { SmsProvider } from "../sms/passerelle.ts";
-import type { DocumentFile, WhatsappProvider } from "./fournisseur.ts";
+import type { DocumentFile, SendReceipt, TemplateMessage, WhatsappProvider } from "./fournisseur.ts";
+import { logoForMessage } from "../institut/logos.ts";
+import { metaFromSettings } from "./meta.ts";
 import { appointmentAt, silenceEnd } from "./numeros.ts";
-import type { DocumentKind } from "./textes.ts";
+import type { DocumentKind, TemplateKind, ValeursModele } from "./textes.ts";
 import { createWaha } from "./waha.ts";
 import { estFormation } from "../formation/mode.ts";
 
@@ -34,6 +36,13 @@ export interface WhatsappMessage {
   lang: Lang;
   /** Texte final, variables déjà remplacées. */
   text: string;
+  /**
+   * WhatsApp Business (W-2) : type du message et valeurs nommées, écrits avec `text`. Meta envoie le modèle avec
+   * ces valeurs ; WAHA et le SMS gardent `text`. Absents d'un message libre, ou d'un message mis en file avant
+   * la mise à jour : Meta l'envoie alors en message libre (W-5).
+   */
+  modele?: TemplateKind;
+  valeurs?: ValeursModele;
   /** Vague 2 : le PDF est produit au moment de l'envoi. */
   document?: { kind: DocumentKind; id: number };
   /** Produit recommandé (images des produits) : la photo est lue au moment de l'envoi, jamais gardée dans la file. */
@@ -70,11 +79,12 @@ export function createPacer({ minMs = 4000, jitterMs = 4000, smsMs = 2000, rando
   };
 }
 
-/** Fournisseur choisi par l'administrateur ; `null` pour « aucun ». */
+/** Fournisseur choisi par l'administrateur (WAHA ou WhatsApp Business) ; `null` pour « aucun ». */
 export async function providerFromSettings(fetchImpl: typeof fetch = fetch): Promise<WhatsappProvider | null> {
   // Base de formation (D-17) : aucun fournisseur, même réglé ; rien ne part.
   if (estFormation()) return null;
   const choice = await getSetting<string>("whatsapp.fournisseur");
+  if (choice === "meta") return metaFromSettings(fetchImpl);
   if (choice !== "waha") return null;
   return createWaha({
     baseUrl: await getSetting<string>("waha.adresse"),
@@ -163,6 +173,9 @@ export function smsDeadline(m: WhatsappMessage, createdAt: number, s: { appointm
   return Math.min(base, createdAt + LATEST_DEADLINE_MS);
 }
 
+/** Identifiant du message chez le fournisseur (Meta : `wamid`), vide si le fournisseur n'en rend pas (WAHA). */
+const refOf = (receipt: SendReceipt | void): string => (receipt as SendReceipt | undefined)?.id ?? "";
+
 /**
  * Gestionnaire des messages (sous-projet 7 § 3 ; SMS : spec du 04/10/2026,
  * § 2). Ordre : message sans objet ignoré, silence, canal de la cliente lu à
@@ -174,11 +187,16 @@ export function smsDeadline(m: WhatsappMessage, createdAt: number, s: { appointm
  * un message libre ; produit supprimé : ignoré. Une photo ne part jamais par SMS.
  */
 export function createWhatsappHandler(
-  deps: { provider: () => Promise<WhatsappProvider | null>; sms?: () => Promise<SmsProvider | null>; document?: DocumentSource; productPhoto?: ProductPhotoSource },
+  deps: {
+    provider: () => Promise<WhatsappProvider | null>; sms?: () => Promise<SmsProvider | null>; document?: DocumentSource; productPhoto?: ProductPhotoSource;
+    /** Logo de l'institut, en-tête d'un produit sans photo (WhatsApp Business, W-17). */
+    logo?: () => Promise<DocumentFile | null>;
+  },
   pacer: Pacer,
 ) {
   const smsOf = deps.sms ?? (async () => null);
   const photoOf = deps.productPhoto ?? readProductPhoto;
+  const logoOf = deps.logo ?? logoForMessage;
 
   /** Envoi par SMS ; tout échec est définitif (décision 8), avec la raison de WhatsApp quand il a été tenté. */
   async function sendSms(sms: SmsProvider, m: WhatsappMessage, ctx: { id: number; now: number }, whatsappError: Error | null): Promise<void> {
@@ -192,10 +210,10 @@ export function createWhatsappHandler(
     await noteChannel(ctx.id, "sms");
   }
 
-  /** Canal noté après l'envoi : jamais fatal (un envoi parti ne doit pas être retenté), jamais le texte au journal. */
-  async function noteChannel(id: number, channel: "whatsapp" | "sms"): Promise<void> {
+  /** Canal et identifiant du fournisseur notés après l'envoi : jamais fatal (un envoi parti ne doit pas être retenté), jamais le texte au journal. */
+  async function noteChannel(id: number, channel: "whatsapp" | "sms", ref = ""): Promise<void> {
     try {
-      await run("UPDATE outbox SET channel = ? WHERE id = ?", [channel, id]);
+      await run("UPDATE outbox SET channel = ?, provider_ref = ? WHERE id = ?", [channel, ref, id]);
     } catch (error) {
       console.error(`Canal ${channel} non noté pour l'envoi ${id}`, error instanceof Error ? error.name : "erreur");
     }
@@ -245,12 +263,13 @@ export function createWhatsappHandler(
 
     // WhatsApp (canal « whatsapp », ou geste volontaire pour une cliente « Aucun »).
     let whatsappError: Error | null = null;
+    let ref = "";
     try {
       // Fournisseur résolu avant le contrôle d'internet : « aucun fournisseur WhatsApp » reste définitif, en ligne ou non.
       const provider = await deps.provider();
       if (!provider) throw new PermanentError(coded("whatsapp.sans_fournisseur"));
       if (!ctx.online) throw new TemporaryError(coded("whatsapp.pas_internet"));
-      await sendWhatsapp(provider, m, ctx, photo);
+      ref = await sendWhatsapp(provider, m, ctx, photo);
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       if (error instanceof IgnoredDocument) return;
@@ -258,7 +277,7 @@ export function createWhatsappHandler(
     }
     if (!whatsappError) {
       // Hors du try : une panne de la base ici ne doit pas passer pour un échec de WhatsApp.
-      await noteChannel(ctx.id, "whatsapp");
+      await noteChannel(ctx.id, "whatsapp", ref);
       return;
     }
 
@@ -282,31 +301,60 @@ export function createWhatsappHandler(
     throw new TemporaryError(whatsappError.message, { retryAt: ctx.online ? due : Math.min(due, ctx.now + OFFLINE_RETRY_MS) });
   };
 
-  /** Envoi par WhatsApp, tel qu'au sous-projet 7 ; « aucun fournisseur » est une erreur définitive. */
-  async function sendWhatsapp(provider: WhatsappProvider, m: WhatsappMessage, ctx: { id: number; now: number }, photo: DocumentFile | null): Promise<void> {
+  /**
+   * Envoi par WhatsApp ; « aucun fournisseur » est une erreur définitive. WhatsApp Business (W-16, W-17) : un
+   * message avec modèle part avec ses valeurs et son en-tête (PDF du ticket, photo du produit, sinon logo de
+   * l'institut) ; un produit sans photo ni logo, et tout message sans modèle, partent comme avant (message
+   * libre chez Meta, W-5). Rend l'identifiant du message chez le fournisseur (vide pour WAHA).
+   */
+  async function sendWhatsapp(provider: WhatsappProvider, m: WhatsappMessage, ctx: { id: number; now: number }, photo: DocumentFile | null): Promise<string> {
+    const sendTemplate = provider.sendTemplate;
+    if (sendTemplate && m.modele && m.valeurs) {
+      const entete = await headerOf(m, ctx, photo);
+      if (entete !== "libre") {
+        // Dépôt du fichier et envoi comptent pour un seul envoi (W-18).
+        pacer.sent(ctx.now);
+        const receipt = await sendTemplate.call(provider, m.to, { modele: m.modele, lang: m.lang, valeurs: m.valeurs, ...(entete ? { entete } : {}) });
+        return receipt.id;
+      }
+    }
     if (photo) {
       // Photo vue comme une photo par la cliente (`sendImage`), sinon en fichier comme un ticket.
       const send = provider.sendImage ?? provider.sendDocument;
       if (!send) throw new PermanentError(coded("whatsapp.photo_non_prise"));
       pacer.sent(ctx.now);
-      await send.call(provider, m.to, photo, m.text);
-      return;
+      return refOf(await send.call(provider, m.to, photo, m.text));
     }
     if (m.document) {
-      // Le PDF est produit maintenant, jamais gardé dans la file (spec § 3) ; l'API Meta (vague 3) n'a pas encore d'envoi de document.
+      // Le PDF est produit maintenant, jamais gardé dans la file (spec § 3).
       if (!provider.sendDocument) throw new PermanentError(coded("whatsapp.document_non_pris"));
-      const file = deps.document ? await deps.document(m.document) : null;
-      if (file === "annulee") {
-        await run("UPDATE outbox SET manual = 'ignored' WHERE id = ?", [ctx.id]);
-        throw new IgnoredDocument();
-      }
-      if (!file) throw new PermanentError(coded("whatsapp.document_introuvable"));
+      const file = await pdfOf(m.document, ctx);
       pacer.sent(ctx.now);
-      await provider.sendDocument(m.to, file, m.text);
-      return;
+      return refOf(await provider.sendDocument(m.to, file, m.text));
     }
     pacer.sent(ctx.now);
-    await provider.sendText(m.to, m.text);
+    return refOf(await provider.sendText(m.to, m.text));
+  }
+
+  /** PDF d'un document au moment de l'envoi ; facture entièrement reprise par un avoir : marquée « ignorée », rien n'est envoyé. */
+  async function pdfOf(doc: NonNullable<WhatsappMessage["document"]>, ctx: { id: number }): Promise<DocumentFile> {
+    const file = deps.document ? await deps.document(doc) : null;
+    if (file === "annulee") {
+      await run("UPDATE outbox SET manual = 'ignored' WHERE id = ?", [ctx.id]);
+      throw new IgnoredDocument();
+    }
+    if (!file) throw new PermanentError(coded("whatsapp.document_introuvable"));
+    return file;
+  }
+
+  /** En-tête d'un message avec modèle (W-17) : `null` sans en-tête, « libre » pour un produit sans photo ni logo. */
+  async function headerOf(m: WhatsappMessage, ctx: { id: number }, photo: DocumentFile | null): Promise<TemplateMessage["entete"] | null | "libre"> {
+    if (m.document) return { type: "document", file: await pdfOf(m.document, ctx) };
+    if (m.product) {
+      const image = photo ?? (await logoOf());
+      return image ? { type: "image", file: image } : "libre";
+    }
+    return null;
   }
 }
 

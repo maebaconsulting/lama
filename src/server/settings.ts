@@ -8,6 +8,7 @@ import { nowOf } from "./clock.ts";
 import { coded, localize, montant, msg, type MessageKey } from "./messages.ts";
 import { adresseRelaisValide, LARGEURS, MOTIF_SALON, problemeTheme, TEXTE_DONNEES } from "../shared/en-ligne.ts";
 import { DEFAULT_TEXTS, templateProblem, textSetting, TEMPLATE_KINDS } from "./whatsapp/textes.ts";
+import { nomsValides } from "./whatsapp/modeles-meta.ts";
 import { parseAddress } from "./impression/imprimante.ts";
 import { parseLocalAddress } from "./reseau-local.ts";
 import { DEFAULT_TIERS, loyaltyLimits, tiersProblem } from "../shared/fidelite.ts";
@@ -82,6 +83,9 @@ function themeRefuse(v: unknown): string | null {
   return probleme ? coded(`reglage.en_ligne_theme_${probleme}` as MessageKey) : null;
 }
 
+/** Identifiant de Meta (numéro, compte WhatsApp Business) : chiffres seulement, vide pour effacer. */
+const metaId = (v: unknown) => (typeof v === "string" && /^\d{0,30}$/.test(v) ? null : coded("reglage.meta_identifiant"));
+
 export const SETTING_DEFS: Record<string, Def> = {
   "institut.nom": { roles: ["manager"], secret: false, default: "", validate: text(80) },
   "institut.adresse": { roles: ["manager"], secret: false, default: "", validate: text(200) },
@@ -104,8 +108,14 @@ export const SETTING_DEFS: Record<string, Def> = {
   "technique.drive_remote": { roles: ["admin"], secret: false, default: "gdrive:lama", validate: validateDriveRemote },
   "technique.test_internet_url": { roles: ["admin"], secret: false, default: "https://www.google.com/generate_204", validate: (v) => (typeof v === "string" && /^https:\/\//.test(v) ? null : coded("reglage.https")) },
   "whatsapp.jeton_acces": { roles: ["admin"], secret: true, default: null, validate: text(512) },
-  // WhatsApp (sous-projet 7 § 4) : fournisseur et passerelle WAHA à l'administrateur ; `whatsapp.jeton_acces` reste à l'API Meta (vague 3).
-  "whatsapp.fournisseur": { roles: ["admin"], secret: false, default: "aucun", validate: (v) => (v === "aucun" || v === "waha" ? null : coded("reglage.fournisseur")) },
+  // WhatsApp (sous-projet 7 § 4 ; WhatsApp Business, spec du 21/10/2026, W-1, W-10) : fournisseur, passerelle WAHA et compte
+  // WhatsApp Business à l'administrateur ; `whatsapp.jeton_acces` est le jeton d'accès permanent de Meta.
+  "whatsapp.fournisseur": { roles: ["admin"], secret: false, default: "aucun", validate: (v) => (v === "aucun" || v === "waha" || v === "meta" ? null : coded("reglage.fournisseur")) },
+  "whatsapp.meta.numero": { roles: ["admin"], secret: false, default: "", validate: metaId },
+  "whatsapp.meta.compte": { roles: ["admin"], secret: false, default: "", validate: metaId },
+  "whatsapp.meta.noms": { roles: ["admin"], secret: false, default: {}, validate: (v) => (nomsValides(v) ? null : coded("reglage.meta_noms")) },
+  // États des modèles lus chez Meta (W-13) : écrits seulement par « Vérifier les modèles » (`POST /api/whatsapp/meta/modeles/verifier`).
+  "whatsapp.meta.etats": { roles: ["admin"], secret: false, default: null, dedicated: "whatsapp.meta_etats_route" },
   "waha.adresse": { roles: ["admin"], secret: false, default: "http://127.0.0.1:3000", validate: (v) => (typeof v === "string" && v.length <= 200 && /^https?:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? null : coded("reglage.adresse_http")) },
   "waha.cle": { roles: ["admin"], secret: true, default: null, validate: text(200) },
   "waha.session": { roles: ["admin"], secret: false, default: "default", validate: (v) => (typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? null : coded("reglage.session")) },

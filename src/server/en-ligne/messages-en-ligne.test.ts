@@ -105,3 +105,19 @@ test("texte réécrit par la gérante, prénom ailleurs qu'après « Bonjour » 
   assert.equal(sansPrenom("Bonjour {prenom}, à bientôt chez {institut}."), "Bonjour, à bientôt chez {institut}.");
   assert.equal(sansPrenom("Chère {prenom} {nom},"), "Chère {nom},");
 });
+
+test("message enrichi (WhatsApp Business, W-2) : modèle de la nature, valeurs ; sans prénom, valeur vide (Meta la remplace), texte inchangé", () => {
+  const db = baseEssai();
+  const s = reglagesMessages();
+  const jour = Date.parse("2026-10-20T09:00:00Z");
+  assert.equal(inscrireMessage(db, s, "en_ligne_confirmation", MIREILLE, SUJET, jour), true);
+  assert.equal(inscrireMessage(db, s, "en_ligne_refus", { ...MIREILLE, id: 8, cliente_prenom: null }, SUJET, jour, "Nous sommes complets."), true);
+  const [a, b] = file(db).map((r) => JSON.parse(r.payload));
+  assert.equal(a.modele, "en_ligne_confirmation");
+  assert.deepEqual(a.valeurs, { prenom: "Mireille", nom: "Mireille Ngo", institut: "Institut Éclat", telephone: "699 00 00 00", prestation: "Soin visage", date: "mardi 20 octobre", heure: "10:00", praticienne: "Awa" });
+  assert.equal(a.text, texteMessage(s, "en_ligne_confirmation", "fr", QUI, SUJET));
+  assert.equal(b.modele, "en_ligne_refus");
+  assert.equal(b.valeurs.prenom, "");
+  assert.match(b.text, /^Bonjour, nous ne pouvons pas vous recevoir/);
+  assert.match(b.text, /Nous sommes complets\.$/);
+});

@@ -6,7 +6,7 @@ import type { Lang } from "../i18n/translate.ts";
 import { translate, type Key } from "../i18n/translate.ts";
 
 export type WhatsappState = "connecte" | "qr" | "demarrage" | "deconnecte" | "injoignable" | "erreur";
-export interface WhatsappStatus { provider: "aucun" | "waha"; state?: WhatsappState; phone?: string }
+export interface WhatsappStatus { provider: "aucun" | "waha" | "meta"; state?: WhatsappState; phone?: string }
 export type MessageType = "confirmation" | "rappel" | "ticket" | "libre" | "produit" | "anniversaire" | "absence" | "campagne" | "transfert" | "en_ligne";
 
 /** Document joint à un message (vague 2) : facture (ticket), avoir, reçu d'acompte. */
@@ -70,6 +70,12 @@ const STATE_KEYS: Record<WhatsappState, Key> = {
   erreur: "whatsapp.etat.erreur",
 };
 
+/** WhatsApp Business : erreur et panne dites pour Meta ; « connecté » comme WAHA. */
+const META_STATE_KEYS: Partial<Record<WhatsappState, Key>> = {
+  erreur: "whatsapp.etat.meta_erreur",
+  injoignable: "whatsapp.etat.meta_injoignable",
+};
+
 /**
  * Numéro international lisible (vague 2) : Cameroun groupé comme on l'écrit
  * (+237 699 00 00 00), espaces insécables pour qu'il ne se coupe jamais ;
@@ -83,11 +89,13 @@ export function groupPhone(digits: string): string {
 
 export function statusText(status: WhatsappStatus, lang: Lang): string {
   if (status.provider === "aucun" || !status.state) return translate(lang, "whatsapp.etat.aucun");
-  return translate(lang, STATE_KEYS[status.state], { numero: groupPhone(status.phone ?? "") });
+  const key = (status.provider === "meta" ? META_STATE_KEYS[status.state] : undefined) ?? STATE_KEYS[status.state];
+  return translate(lang, key, { numero: groupPhone(status.phone ?? "") });
 }
 
-/** État à écrire en rouge : session à reprendre ; le QR code à scanner et le démarrage sont des étapes normales (vague 2). */
+/** État à écrire en rouge : session à reprendre (WAHA ; le QR code et le démarrage sont des étapes normales), ou WhatsApp Business non connecté. */
 export function statusAlarming(status: WhatsappStatus): boolean {
+  if (status.provider === "meta") return status.state !== "connecte";
   return status.provider === "waha" && (status.state === "deconnecte" || status.state === "injoignable" || status.state === "erreur");
 }
 

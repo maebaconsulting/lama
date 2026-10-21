@@ -91,6 +91,8 @@ const RULES: Rule[] = [
   { methods: ["POST"], path: /^\/api\/whatsapp\/manual\/\d+(\/open)?$/, roles: FRONT },
   { methods: ["POST"], path: /^\/api\/clients\/\d+\/whatsapp$/, roles: FRONT },
   { methods: ["POST"], path: /^\/api\/whatsapp\/documents$/, roles: FRONT },
+  // WhatsApp Business (spec du 21/10/2026, W-11 à W-13) : test de connexion, message d'essai et modèles à l'administrateur seul.
+  { methods: ["GET", "POST"], path: /^\/api\/whatsapp\/meta\//, roles: ADMIN },
   // SMS (spec du 04/10/2026, § 3) : état pour l'administrateur et la gérante, SMS d'essai pour l'administrateur.
   { methods: ["GET"], path: /^\/api\/sms\/status$/, roles: LEADS },
   { methods: ["POST"], path: /^\/api\/sms\/test$/, roles: ADMIN },

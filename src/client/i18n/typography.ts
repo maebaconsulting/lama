@@ -8,7 +8,7 @@ const PROPER = new Set([
   "Google", "Drive", "WhatsApp", "Orange", "Money", "MTN", "Mobile", "Wi-Fi", "Excel",
   "Ubuntu", "Server", "Node", "French", "English", "Douala", "Réglages", "Connexions", "Sauvegardes",
   "Settings", "Connections", "Backups", "Institut", "Institute", "Ctrl-D", "Ctrl-C", "Gateway", "Android", "Mo",
-  "Safari", "Windows", "Mac",
+  "Safari", "Windows", "Mac", "Meta", "Business",
 ]);
 
 /** Variables `{nom}` d'un texte, triées. */

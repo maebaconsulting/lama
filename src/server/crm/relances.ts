@@ -18,7 +18,7 @@ import type { Database, StorageBinding } from "../storage.ts";
 import { WHATSAPP_KIND, type WhatsappMessage } from "../whatsapp/envoi.ts";
 import { appointmentAt, inSilence, normalizePhone } from "../whatsapp/numeros.ts";
 import { readMessageSettings, type MessageSettings } from "../whatsapp/rendez-vous.ts";
-import { firstName, renderTemplate } from "../whatsapp/textes.ts";
+import { firstName, renderTemplate, type ValeursModele } from "../whatsapp/textes.ts";
 
 /** Réglages lus avant la transaction : ceux des messages et ceux des relances. */
 export interface RelanceSettings extends MessageSettings {
@@ -66,8 +66,9 @@ type ClientRow = { id: number; name: string; phone: string | null; language: str
 /** Message d'une relance pour une cliente, dans sa langue (à défaut celle de l'institut). */
 function relanceMessage(s: RelanceSettings, kind: "anniversaire" | "absence", row: ClientRow, origin: Omit<WhatsappMessage["origin"], "clientId">): WhatsappMessage {
   const lang: Lang = row.language === "fr" || row.language === "en" ? row.language : s.lang;
-  const text = renderTemplate(s.texts[kind][lang], { prenom: firstName(row.name), nom: row.name.trim(), institut: s.institut, telephone: s.telephone });
-  return { to: normalizePhone(row.phone ?? "", s.indicatif) ?? "", lang, text, origin: { ...origin, clientId: row.id } };
+  const valeurs: ValeursModele = { prenom: firstName(row.name), nom: row.name.trim(), institut: s.institut, telephone: s.telephone };
+  const text = renderTemplate(s.texts[kind][lang], valeurs);
+  return { to: normalizePhone(row.phone ?? "", s.indicatif) ?? "", lang, text, modele: kind, valeurs, origin: { ...origin, clientId: row.id } };
 }
 
 /** Met en file les relances dues à `now` ; renvoie le nombre d'envois nouvellement inscrits. */

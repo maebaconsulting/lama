@@ -58,7 +58,11 @@ test("envoi d'un produit : mis en file avec l'identifiant du produit et le texte
   assert.equal(rows.length, 2, "un envoi par appui");
   assert.match(rows[0].dedupe_key, new RegExp(`^wa:produit:${product}:`));
   assert.notEqual(rows[0].dedupe_key, rows[1].dedupe_key);
-  assert.deepEqual(JSON.parse(rows[0].payload), { to: "237699123456", lang: "fr", text: "Aïcha, regardez ce sérum.", product: { id: product }, origin: { type: "produit", clientId: client } });
+  assert.deepEqual(JSON.parse(rows[0].payload), {
+    to: "237699123456", lang: "fr", text: "Aïcha, regardez ce sérum.", modele: "produit",
+    valeurs: { prenom: "Aïcha", nom: "Aïcha Mbarga", produit: "Sérum Karité", prix: "12\u202f000\u00a0FCFA", institut: "Institut Ébène", telephone: "" },
+    product: { id: product }, origin: { type: "produit", clientId: client },
+  });
   assert.ok(rows.every((r) => r.created_by !== null));
   const audit = ctx.db.prepare("SELECT target FROM audit_log WHERE action = 'whatsapp.produit' ORDER BY id").all().map((r) => (r as { target: string }).target);
   assert.deepEqual(audit, ["Sérum Karité", "Sérum Karité"]);

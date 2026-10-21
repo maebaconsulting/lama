@@ -104,3 +104,13 @@ test("type « transfert » dans « À envoyer à la main » (spec du 04/10/2026)
   assert.equal(manualTypeLabel("transfert", "fr"), "Transfert");
   assert.equal(manualTypeLabel("transfert", "en"), "Transfer");
 });
+
+test("WhatsApp Business : état dit en clair, en rouge hors connexion, jamais de bandeau de session", () => {
+  assert.equal(statusText({ provider: "meta", state: "connecte", phone: "237699000000" }, "fr"), "Connecté au numéro +237\u00a0699\u00a000\u00a000\u00a000.");
+  assert.equal(statusText({ provider: "meta", state: "erreur" }, "fr"), "WhatsApp Business en erreur\u00a0: vérifiez le jeton et les identifiants avec «\u00a0Tester la connexion\u00a0».");
+  assert.equal(statusText({ provider: "meta", state: "injoignable" }, "en"), "Meta unreachable: check the internet connection.");
+  assert.equal(statusText({ provider: "waha", state: "erreur" }, "fr"), "Passerelle en erreur\u00a0: vérifiez sa clé et son adresse.", "WAHA inchangé");
+  assert.equal(statusAlarming({ provider: "meta", state: "erreur" }), true);
+  assert.equal(statusAlarming({ provider: "meta", state: "connecte", phone: "1" }), false);
+  assert.equal(sessionAlert({ provider: "meta", state: "erreur" }), false);
+});

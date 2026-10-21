@@ -31,6 +31,13 @@ test("routes coupées : sauvegarde, restauration, heure du système, session et 
   ]) assert.equal(coupeeEnFormation(method, path), false, `${method} ${path}`);
 });
 
+test("WhatsApp Business : test de connexion, message d'essai et vérification des modèles coupés ; la liste des modèles passe", () => {
+  for (const path of ["/api/whatsapp/meta/tester", "/api/whatsapp/meta/essai", "/api/whatsapp/meta/modeles/verifier", "/api/whatsapp/meta/essai/"]) {
+    assert.equal(coupeeEnFormation("POST", path), true, path);
+  }
+  assert.equal(coupeeEnFormation("GET", "/api/whatsapp/meta/modeles"), false);
+});
+
 test("API en formation : refus 409 lisible, aucun fichier de sauvegarde écrit, horloge jamais appelée ; aucune alerte de sauvegarde", async (t) => {
   await avecFormation(true, async () => {
     const usb = mkdtempSync(join(tmpdir(), "lama-coupures-usb-"));

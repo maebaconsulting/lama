@@ -15,7 +15,7 @@ import { IMAGE_VERSION_SQL } from "../produits/images.ts";
 import { WHATSAPP_KIND, type WhatsappMessage } from "./envoi.ts";
 import { normalizePhone } from "./numeros.ts";
 import type { MessageSettings } from "./rendez-vous.ts";
-import { firstName, renderTemplate } from "./textes.ts";
+import { firstName, renderTemplate, type ValeursModele } from "./textes.ts";
 
 /** Refus : produit ou cliente inconnus, cliente sans numéro, numéro impossible à normaliser. */
 export type ProductRefusal = "produit_introuvable" | "cliente_introuvable" | "sans_numero" | "numero_invalide";
@@ -28,6 +28,8 @@ export interface ProductDraft {
   /** Nom français du produit, pour le journal. */
   productName: string;
   imageVersion: number | null;
+  /** Valeurs nommées du modèle de Meta (W-2) : le texte relu par l'équipe ne sert qu'à WAHA et au SMS. */
+  valeurs: ValeursModele;
 }
 
 /** Destinataire et texte prérempli de l'envoi d'un produit à une cliente, ou la raison du refus. */
@@ -43,14 +45,15 @@ export async function productDraft(s: MessageSettings, productId: number, client
   if (!to) return { ok: false, refusal: "numero_invalide" };
   const lang: Lang = client.language === "fr" || client.language === "en" ? client.language : s.lang;
   const name = lang === "en" && (product.name_en ?? "").trim() ? product.name_en! : product.name;
-  const text = renderTemplate(s.texts.produit[lang], {
+  const valeurs: ValeursModele = {
     prenom: firstName(client.name), nom: client.name.trim(), produit: name, prix: formatMontantDocument(entierMineur(product.price), lang), institut: s.institut, telephone: s.telephone,
-  });
-  return { ok: true, draft: { to, lang, text, productName: product.name, imageVersion: product.image_version } };
+  };
+  const text = renderTemplate(s.texts.produit[lang], valeurs);
+  return { ok: true, draft: { to, lang, text, productName: product.name, imageVersion: product.image_version, valeurs } };
 }
 
 /** Met en file l'envoi du produit avec le texte relu ; clé unique : un envoi par appui. */
 export async function queueProductMessage(draft: ProductDraft, productId: number, clientId: number, text: string, opts: { now: number; createdBy: number }): Promise<void> {
-  const message: WhatsappMessage = { to: draft.to, lang: draft.lang, text, product: { id: productId }, origin: { type: "produit", clientId } };
+  const message: WhatsappMessage = { to: draft.to, lang: draft.lang, text, modele: "produit", valeurs: draft.valeurs, product: { id: productId }, origin: { type: "produit", clientId } };
   await enqueue({ kind: WHATSAPP_KIND, payload: message, dedupeKey: `wa:produit:${productId}:${randomUUID()}`, createdBy: opts.createdBy, now: opts.now });
 }

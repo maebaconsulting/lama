@@ -85,7 +85,7 @@ test("migration 019 sur une base en service avec une facture : XAF écrit et aus
     INSERT INTO invoice_lines (invoice_id, kind, ref_id, label_fr, label_en, quantity, unit_price, line_total, staff_id) VALUES (1, 'product', 1, 'Crème hydratante', '', 1, 10000, 10000, NULL);
     INSERT INTO payments (invoice_id, method, amount, reference, cash_given, change_given) VALUES (1, 'cash', 10000, '', 10000, 0);
   `);
-  assert.deepEqual(runMigrations(db), ["019_devise", "020_horaires", "021_en_ligne", "022_curseur_ref", "023_prenom_en_ligne", "024_supplements", "025_mise_a_jour"]);
+  assert.deepEqual(runMigrations(db), ["019_devise", "020_horaires", "021_en_ligne", "022_curseur_ref", "023_prenom_en_ligne", "024_supplements", "025_mise_a_jour", "026_whatsapp_meta"]);
   assert.equal(devise(db), '"XAF"');
   upsertDevise(db, '"XAF"');
   assert.equal(devise(db), '"XAF"', "la même valeur se réécrit");

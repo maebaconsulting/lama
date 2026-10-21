@@ -121,3 +121,12 @@ test("double envoi : la même demande rejouée en moins d'une minute ne réécri
   assert.equal((await gerante("POST", "/api/campaigns", body)).status, 201, "une minute plus tard : nouvelle campagne");
   assert.equal(count(ctx, "outbox"), 4);
 });
+
+test("campagne enrichie (WhatsApp Business, W-2) : modèle « campagne », texte rendu pour la cliente dans {texte}", async (t) => {
+  const { ctx, gerante } = await withClients(t);
+  assert.equal((await gerante("POST", "/api/campaigns", { tag: "vip", text_fr: "Bonjour {prenom}, nouveautés chez {institut}.", text_en: "" })).status, 201);
+  const m = JSON.parse((ctx.db.prepare("SELECT payload FROM outbox WHERE dedupe_key = 'wa:campagne:1:1'").get() as { payload: string }).payload);
+  assert.equal(m.modele, "campagne");
+  assert.deepEqual(m.valeurs, { prenom: "Aïcha", nom: "Aïcha Mbarga", institut: "Institut Ébène", telephone: "699 00 00 00", texte: "Bonjour Aïcha, nouveautés chez Institut Ébène." });
+  assert.equal(m.text, m.valeurs.texte);
+});
