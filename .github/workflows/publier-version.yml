@@ -71,8 +71,9 @@ jobs:
         env:
           LAMA_CLE_SIGNATURE: ${{ secrets.LAMA_CLE_SIGNATURE }}
         run: |
-          umask 077
-          printf '%s\n' "$LAMA_CLE_SIGNATURE" > "$RUNNER_TEMP/cle.pem"
+          # umask 077 pour la seule clé : appliqué à toute l'étape, il rendait l'archive 1.0.0
+          # illisible par le compte lama (fichiers en 0600, 21/10/2026).
+          (umask 077; printf '%s\n' "$LAMA_CLE_SIGNATURE" > "$RUNNER_TEMP/cle.pem")
           trap 'rm -f "$RUNNER_TEMP/cle.pem"' EXIT
           bash outils/publication/preparer-version.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/note.md" "$RUNNER_TEMP/cle.pem" "$RUNNER_TEMP/version"
           rm -f "$RUNNER_TEMP/cle.pem"

@@ -52,6 +52,9 @@ trap 'rm -rf "$ETAPE"' EXIT
 mkdir -p "$ETAPE/$NOM"
 cp -R dist dist-server deploy "$ETAPE/$NOM/"
 printf '%s\n' "$VERSION" > "$ETAPE/$NOM/VERSION"
+# Droits normaux quel que soit le umask de la fabrication : le compte lama doit tout lire
+# (archive 1.0.0 fabriquée sous umask 077, illisible une fois installée, 21/10/2026).
+chmod -R u=rwX,go=rX "$ETAPE/$NOM"
 
 mkdir -p paquets
 # COPYFILE_DISABLE évite les fichiers ._* du Mac dans l'archive, --no-xattrs

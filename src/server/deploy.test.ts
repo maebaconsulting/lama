@@ -1370,3 +1370,17 @@ test("installation : avahi relancé après le changement de nom, sinon il annonc
   const relance = s.indexOf("systemctl restart avahi-daemon");
   assert.ok(nom > 0 && relance > nom, "restart d'avahi après hostnamectl");
 });
+
+test("droits des fichiers : archive et version installée lisibles par le compte lama, quel que soit le umask (archive 1.0.0 en 0600, 21/10/2026)", () => {
+  const paquet = read("fabriquer-paquet.sh");
+  const droits = paquet.indexOf('chmod -R u=rwX,go=rX "$ETAPE/$NOM"');
+  assert.ok(droits > 0 && droits < paquet.indexOf("tar --no-xattrs"), "droits normalisés avant l'archive");
+  for (const nom of ["installer.sh", "mettre-a-jour.sh"]) {
+    const s = read(nom);
+    assert.match(s, /chmod -R u=rwX,go=rX "\$APP\/versions\/\$VERSION"/, nom);
+    assert.doesNotMatch(s, /chmod -R go-w "\$APP\/versions/, nom);
+  }
+  const travail = readFileSync(new URL("../../.github/workflows/publier-version.yml", import.meta.url), "utf8");
+  assert.match(travail, /\(umask 077; printf '%s\\n' "\$LAMA_CLE_SIGNATURE" > "\$RUNNER_TEMP\/cle\.pem"\)/, "umask strict pour la seule clé");
+  assert.doesNotMatch(travail, /^\s*umask 077\s*$/m, "jamais pour toute l'étape de fabrication");
+});

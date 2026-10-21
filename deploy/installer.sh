@@ -324,7 +324,8 @@ install -d -m 0755 -o root -g root "$APP" "$APP/versions" "$USB"
 rm -rf "$APP/versions/$VERSION"
 cp -R "$SOURCE" "$APP/versions/$VERSION"
 chown -R root:root "$APP/versions/$VERSION"
-chmod -R go-w "$APP/versions/$VERSION"
+# Lisible par le compte lama, sans écriture pour lui, quels que soient les droits de l'archive.
+chmod -R u=rwX,go=rX "$APP/versions/$VERSION"
 ln -sfn "$APP/versions/$VERSION" "$APP/actuelle"
 
 etape "$(msg "Certificat HTTPS et heure du serveur" "HTTPS certificate and server time")"

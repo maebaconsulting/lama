@@ -185,7 +185,8 @@ if [ "${BASH_SOURCE:-$0}" = "$0" ]; then
   rm -rf "$APP/versions/$VERSION"
   cp -R "$SOURCE" "$APP/versions/$VERSION"
   chown -R root:root "$APP/versions/$VERSION"
-  chmod -R go-w "$APP/versions/$VERSION"
+  # Lisible par le compte lama, sans écriture pour lui, quels que soient les droits de l'archive.
+  chmod -R u=rwX,go=rX "$APP/versions/$VERSION"
   install -m 0644 "$APP/versions/$VERSION"/deploy/systemd/* /etc/systemd/system/
   systemctl daemon-reload
 
