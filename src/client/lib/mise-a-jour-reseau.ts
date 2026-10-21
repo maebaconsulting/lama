@@ -26,6 +26,7 @@ export interface EtatMiseAJour {
   disponible: { version: string; publiee_le: number | null; note: string } | null;
   verifie_le: number | null;
   erreur: string | null;
+  aucune_publiee: boolean;
   mecanisme?: boolean;
   mode?: "manuel" | "automatique";
   en_cours?: boolean;
@@ -40,6 +41,16 @@ export const ETAPE_KEYS: Record<EtapeOperation, Key> = {
   controle: "mise_a_jour.etape.controle",
   termine: "mise_a_jour.etape.termine",
 };
+
+/**
+ * Ligne « Version disponible » sans version annoncée : « lama est à jour » seulement après une
+ * vérification réussie d'une version publiée ; « aucune version publiée » si le dépôt n'en a pas ;
+ * rien (tiret) avant toute vérification, après un échec ou pour une version de développement.
+ */
+export function texteSansVersion(e: EtatMiseAJour): Key | null {
+  if (e.installee.developpement || e.verifie_le === null || e.erreur !== null) return null;
+  return e.aucune_publiee ? "mise_a_jour.aucune_publiee" : "mise_a_jour.a_jour";
+}
 
 /** Bouton « Mettre à jour vers X.Y.Z » : mécanisme posé, version publiée installée, version plus récente annoncée, rien en cours. */
 export function peutMettreAJour(e: EtatMiseAJour): boolean {

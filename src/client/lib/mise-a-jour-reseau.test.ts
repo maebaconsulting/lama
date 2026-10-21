@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DICTIONARIES } from "../i18n/translate.ts";
-import { derniereOperation, ETAPE_KEYS, etapeKey, operationEnCours, pastilleMiseAJour, peutMettreAJour, type EtatMiseAJour, type OperationMiseAJour } from "./mise-a-jour-reseau.ts";
+import { derniereOperation, ETAPE_KEYS, etapeKey, operationEnCours, pastilleMiseAJour, peutMettreAJour, texteSansVersion, type EtatMiseAJour, type OperationMiseAJour } from "./mise-a-jour-reseau.ts";
 
 /** Rubrique « Mise à jour », règles de l'écran (spec du 21/10/2026, M-13 à M-16). */
 
@@ -9,9 +9,9 @@ const OP: OperationMiseAJour = { operation: "1-2", version_cible: "1.2.0", etape
 const ADMIN: EtatMiseAJour = {
   installee: { version: "1.1.0", developpement: false, installee_le: 1 },
   disponible: { version: "1.2.0", publiee_le: 2, note: "Agenda plus rapide." },
-  verifie_le: 3, erreur: null, mecanisme: true, mode: "manuel", en_cours: false, operation: null,
+  verifie_le: 3, erreur: null, aucune_publiee: false, mecanisme: true, mode: "manuel", en_cours: false, operation: null,
 };
-const GERANTE: EtatMiseAJour = { installee: ADMIN.installee, disponible: ADMIN.disponible, verifie_le: 3, erreur: null };
+const GERANTE: EtatMiseAJour = { installee: ADMIN.installee, disponible: ADMIN.disponible, verifie_le: 3, erreur: null, aucune_publiee: false };
 
 test("bouton « Mettre à jour » : mécanisme posé, version publiée installée, version plus récente annoncée, rien en cours (M-13, M-16)", () => {
   assert.equal(peutMettreAJour(ADMIN), true);
@@ -65,4 +65,14 @@ test("etapeKey : étape connue traduite, inconnue retombe sur la préparation", 
   assert.equal(etapeKey("sauvegarde"), "mise_a_jour.etape.sauvegarde");
   assert.equal(etapeKey("inconnue"), "mise_a_jour.preparation");
   assert.equal(etapeKey("toString"), "mise_a_jour.preparation");
+});
+
+test("version disponible absente : « à jour » seulement après une vérification réussie ; aucune version publiée dite comme telle (mini-PC d'essai, 21/10/2026)", () => {
+  const rien = { ...ADMIN, disponible: null };
+  assert.equal(texteSansVersion(rien), "mise_a_jour.a_jour");
+  assert.equal(texteSansVersion({ ...rien, aucune_publiee: true }), "mise_a_jour.aucune_publiee");
+  assert.equal(texteSansVersion({ ...rien, verifie_le: null }), null, "jamais vérifiée : rien n'est affirmé");
+  assert.equal(texteSansVersion({ ...rien, erreur: "Réponse inattendue" }), null, "vérification en échec : pas de « à jour »");
+  assert.equal(texteSansVersion({ ...rien, installee: { ...rien.installee, developpement: true } }), null, "version de développement : jamais proposée");
+  for (const lang of ["fr", "en"] as const) assert.ok(DICTIONARIES[lang]["mise_a_jour.aucune_publiee"], lang);
 });

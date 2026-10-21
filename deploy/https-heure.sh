@@ -45,6 +45,40 @@ installer_https_heure() {
   echo "$(msg "Réservez l'adresse $ADRESSE à ce serveur dans la box, elle figure dans le certificat. Si elle change, lancez sudo lama-certificat --adresse suivi de la nouvelle adresse." "Reserve the address $ADRESSE for this server in the router, it is written in the certificate. If it changes, run sudo lama-certificat --adresse followed by the new address.")"
 }
 
+# Fait approuver l'autorité de l'institut par le serveur lui-même, pour ouvrir https://lama.local
+# sans avertissement depuis son propre écran (Ubuntu bureau) : magasin du système
+# (update-ca-certificates, curl et la plupart des programmes) et règle de Firefox
+# (policies.json, lu aussi par le Firefox en snap d'Ubuntu), la règle existante étant
+# complétée, jamais écrasée. Les autres appareils passent toujours par /certificat.
+# Dossiers remplaçables pour les essais : LAMA_CA_SYSTEME_DIR, LAMA_FIREFOX_POLICIES_DIR.
+# Retour 1 si une étape échoue : rien d'indispensable, lama sert quand même en https.
+# Sous-shell en umask 022 : /etc/firefox, créé au passage, doit rester lisible par Firefox
+# même quand root a un umask strict (vu sur le mini-PC d'essai, dossier créé en 0700).
+approuver_autorite_localement() (
+  umask 022
+  local AUTORITE="$1/tls/autorite.crt" SYSTEME="${LAMA_CA_SYSTEME_DIR:-/usr/local/share/ca-certificates}" FIREFOX="${LAMA_FIREFOX_POLICIES_DIR:-/etc/firefox/policies}"
+  [ -f "$AUTORITE" ] || return 0
+  install -d -m 0755 "$SYSTEME" "$FIREFOX" || return 1
+  install -m 0644 "$AUTORITE" "$SYSTEME/lama-autorite.crt" || return 1
+  if command -v update-ca-certificates >/dev/null 2>&1; then update-ca-certificates >/dev/null 2>&1 || return 1; fi
+  install -m 0644 "$AUTORITE" "$FIREFOX/lama-autorite.crt" || return 1
+  # Ajoute le certificat à policies.Certificates.Install ; un fichier illisible n'est pas touché.
+  node -e '
+    const fs = require("node:fs");
+    const [fichier, certificat] = process.argv.slice(1);
+    let regles = {};
+    if (fs.existsSync(fichier)) regles = JSON.parse(fs.readFileSync(fichier, "utf8"));
+    const p = (regles.policies ??= {});
+    const c = (p.Certificates ??= {});
+    const liste = Array.isArray(c.Install) ? c.Install : [];
+    if (!liste.includes(certificat)) liste.push(certificat);
+    c.Install = liste;
+    fs.writeFileSync(fichier, JSON.stringify(regles, null, 2) + "\n", { mode: 0o644 });
+  ' "$FIREFOX/policies.json" "$FIREFOX/lama-autorite.crt" || return 1
+  # Lisible par Firefox, lancé sous le compte de la personne, quel que soit le umask de root.
+  chmod 0644 "$FIREFOX/policies.json" || return 1
+)
+
 # Vrai dès que lama répond sur la machine : en https (autorité de l'institut,
 # nom lama.local) quand un certificat existe, sinon en http. Avec « ou-http »
 # (retour à une version d'avant le HTTPS), une réponse en http suffit. En http, seule

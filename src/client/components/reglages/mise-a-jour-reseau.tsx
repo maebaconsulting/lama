@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth-context";
 import { useLoad } from "../../hooks/use-load";
 import { EMPTY, formatInstant } from "../../lib/format";
-import { derniereOperation, etapeKey, operationEnCours, peutMettreAJour, type EtatMiseAJour } from "../../lib/mise-a-jour-reseau";
+import { derniereOperation, etapeKey, operationEnCours, peutMettreAJour, texteSansVersion, type EtatMiseAJour } from "../../lib/mise-a-jour-reseau";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,7 @@ export function MiseAJourReseau() {
   const e = etat.data;
   const enCours = e ? operationEnCours(e) : null;
   const derniere = e ? derniereOperation(e) : null;
+  const sansVersion = e ? texteSansVersion(e) : null;
 
   useEffect(() => {
     if (enCours === null) return;
@@ -81,7 +82,7 @@ export function MiseAJourReseau() {
             </dd>
             <dt className="etiquette text-encre-grise">{t("mise_a_jour.disponible")}</dt>
             <dd>
-              {e.disponible ? e.disponible.version : t("mise_a_jour.a_jour")}
+              {e.disponible ? e.disponible.version : sansVersion ? t(sansVersion) : EMPTY}
               {e.disponible?.publiee_le != null && <span className="block text-encre-grise">{t("mise_a_jour.publiee_le", { date: formatInstant(e.disponible.publiee_le, lang) })}</span>}
             </dd>
           </dl>

@@ -52,7 +52,7 @@ test("lecture : administrateur et gérante seulement ; la gérante lit les versi
   const gerante = await s.as("manager");
   const vue = await gerante("GET", "/api/mise-a-jour", undefined, FR);
   assert.equal(vue.status, 200);
-  assert.deepEqual(Object.keys(vue.body).sort(), ["disponible", "erreur", "installee", "verifie_le"]);
+  assert.deepEqual(Object.keys(vue.body).sort(), ["aucune_publiee", "disponible", "erreur", "installee", "verifie_le"]);
   assert.deepEqual(vue.body.installee, { version: "1.1.0", developpement: false, installee_le: Date.parse("2026-10-01T10:00:00Z") });
   assert.deepEqual(vue.body.disponible, { version: "1.2.0", publiee_le: Date.parse("2026-11-02T09:00:00Z"), note: "Agenda plus rapide." });
   assert.equal((await gerante("GET", "/api/mise-a-jour", undefined, { "Accept-Language": "en" })).body.disponible.note, "Faster calendar.");
@@ -77,14 +77,14 @@ test("Vérifier maintenant : au plus une fois par minute, de nouveau si l'heure 
   assert.equal(s.serveur.appels.length, 3, "heure reculée : jamais bloqué");
 });
 
-test("faux serveur des versions : lent, 404, JSON invalide ; la dernière réponse est gardée, rien ne change (M-12, M-16)", async (t) => {
+test("faux serveur des versions : lent, erreur 500, JSON invalide ; la dernière réponse est gardée, rien ne change (M-12, M-16)", async (t) => {
   const serveur = fauxServeur();
   const s = await scene(t, { serveur });
   const admin = await s.as("admin");
   await admin("POST", "/api/mise-a-jour/verifier", undefined, FR);
   const injoignable = "Impossible de joindre le serveur des versions\u00a0: vérifiez internet, puis «\u00a0Vérifier maintenant\u00a0».";
   const inattendue = "Réponse inattendue du serveur des versions\u00a0: réessayez plus tard.";
-  for (const [reponse, texte] of [[{ jamais: true }, injoignable], [{ statut: 404, corps: { message: "Not Found" } }, inattendue], [{ corps: "{pas du json" }, inattendue]] as const) {
+  for (const [reponse, texte] of [[{ jamais: true }, injoignable], [{ statut: 500, corps: { message: "Server Error" } }, inattendue], [{ corps: "{pas du json" }, inattendue]] as const) {
     serveur.reponse.jamais = false;
     serveur.reponse.statut = undefined;
     serveur.reponse.corps = undefined;
@@ -218,4 +218,15 @@ test("sauvegarde de nuit vue par systemd ; faux sans systemd ni unité active", 
   const routes = readFileSync(new URL("../backup/routes.ts", import.meta.url), "utf8");
   assert.match(routes, /sauvegardesManuelles\+\+;/);
   assert.match(routes, /finally \{\n      sauvegardesManuelles--;/);
+});
+
+test("dépôt sans version publiée (404) : ni erreur ni version annoncée, « aucune version publiée » (mini-PC d'essai, 21/10/2026)", async (t) => {
+  const serveur = fauxServeur({ statut: 404, corps: { message: "Not Found" } });
+  const s = await scene(t, { serveur });
+  const admin = await s.as("admin");
+  const vue = await admin("POST", "/api/mise-a-jour/verifier", undefined, FR);
+  assert.equal(vue.status, 200);
+  assert.deepEqual([vue.body.erreur, vue.body.disponible, vue.body.aucune_publiee], [null, null, true]);
+  const gerante = await s.as("manager");
+  assert.equal((await gerante("GET", "/api/mise-a-jour")).body.aucune_publiee, true, "la gérante lit le même état");
 });

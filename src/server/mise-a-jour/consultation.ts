@@ -11,7 +11,8 @@ import { VERSION_PUBLIEE } from "./version.ts";
 export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 export type VersionPubliee = { version: string; publiee_le: number | null; note_fr: string; note_en: string };
 /** Réponse lue, ou erreur sous forme codée (`@mise_a_jour.…`), traduite à l'affichage. */
-export type Consultation = { ok: true; publiee: VersionPubliee } | { ok: false; erreur: string };
+/** `publiee: null` : le dépôt n'a encore aucune version publiée (GitHub répond 404 sur /releases/latest). */
+export type Consultation = { ok: true; publiee: VersionPubliee | null } | { ok: false; erreur: string };
 
 export const DEPOT_DEFAUT = "maebaconsulting/lama";
 /** Délai de réponse du serveur des versions. */
@@ -83,6 +84,8 @@ export async function consulter(o: { source: string; fetch?: Fetch; delai?: numb
   const coupe = new Promise<never>((_, refuse) => { minuteur = setTimeout(() => refuse(new Error("délai dépassé")), delai); });
   try {
     const r = await Promise.race([envoyer(o.source, { headers: { accept: "application/vnd.github+json", "user-agent": "lama" }, signal: AbortSignal.timeout(delai) }), coupe]);
+    // Aucune version publiée : un état normal (dépôt neuf), pas une panne du serveur des versions.
+    if (r.status === 404) return { ok: true, publiee: null };
     if (r.status !== 200) return invalide;
     const texte = await Promise.race([lireCorps(r), coupe]);
     if (texte === null) return invalide;
@@ -108,7 +111,7 @@ export async function consulter(o: { source: string; fetch?: Fetch; delai?: numb
 
 /** Note la consultation : la version lue ; sur un échec, l'erreur, la dernière réponse restant gardée. */
 export function noterConsultation(db: Database, maintenant: number, r: Consultation): void {
-  if (r.ok) ecrireBase(db, { verifie_le: maintenant, version: r.publiee.version, publiee_le: r.publiee.publiee_le, note_fr: r.publiee.note_fr, note_en: r.publiee.note_en, erreur: null });
+  if (r.ok) ecrireBase(db, { verifie_le: maintenant, version: r.publiee?.version ?? null, publiee_le: r.publiee?.publiee_le ?? null, note_fr: r.publiee?.note_fr ?? null, note_en: r.publiee?.note_en ?? null, erreur: null });
   else ecrireBase(db, { verifie_le: maintenant, erreur: r.erreur });
 }
 

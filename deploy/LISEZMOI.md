@@ -60,6 +60,8 @@ lama sert l'application en https avec un certificat propre à l'institut. L'inst
 2. Sur chaque appareil (tablette, téléphone, ordinateur), ouvrir http://lama.local/certificat (ou http://192.168.x.y/certificat). La page reconnaît l'appareil, propose le bon fichier (profil pour iPhone et iPad, certificat pour Android, Windows et Mac) et donne les étapes. Comparer l'empreinte de l'autorité affichée sur l'appareil à celle qu'a imprimée l'installateur (ou que donne `sudo lama-certificat --etat` sur le serveur) : l'autorité est distribuée en http simple, et seule cette comparaison prouve qu'elle n'a pas été remplacée en route.
 3. Toucher « Vérifier la connexion sécurisée » : la page confirme. Ouvrir ensuite https://lama.local, puis installer lama sur l'écran d'accueil de l'appareil (voir « Installer lama sur l'écran d'accueil »).
 
+Sur le serveur lui-même (Ubuntu bureau), rien à faire : l'installation et la mise à jour y approuvent l'autorité, pour le système et pour Firefox (règle `/etc/firefox/policies/policies.json`, complétée sans être écrasée). Firefox déjà ouvert doit être relancé une fois.
+
 Le port 80 ne sert que cette page et ses fichiers : toute autre adresse en http renvoie vers https. Le certificat du serveur se renouvelle seul (tâche `lama-certificat.timer`, le 1er de chaque mois, quand il reste moins de 90 jours), sans redémarrer lama et sans rien refaire sur les appareils.
 
 Les appareils qui passent au https gardent leur session et leur déclaration seulement dans les 30 jours suivant le premier démarrage en https : passé ce délai, il faut se reconnecter et déclarer de nouveau l'appareil.

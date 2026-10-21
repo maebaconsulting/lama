@@ -199,6 +199,7 @@ if [ "${BASH_SOURCE:-$0}" = "$0" ]; then
   # Avant le redémarrage : la nouvelle version démarre directement en https. Un échec
   # laisse la mise à jour continuer, lama démarre alors en http seul.
   installer_https_heure "$APP/versions/$VERSION" "$CONF" || echo "$(msg "Le certificat HTTPS n'a pas pu être fait, lama reste en http. Lancez ensuite sudo lama-certificat --adresse suivi de l'adresse fixe du serveur." "The HTTPS certificate could not be made, lama stays on http. Then run sudo lama-certificat --adresse followed by the server's fixed address.")"
+  approuver_autorite_localement "$CONF" || echo "$(msg "Le serveur n'a pas pu approuver lui-même le certificat de l'institut : sur son écran, passer par http://lama.local/certificat." "The server could not trust the institute certificate itself: on its own screen, go through http://lama.local/certificat.")"
   systemctl enable lama-certificat.timer
   systemctl start lama-certificat.timer
   ln -sfn "$APP/versions/$VERSION" "$APP/actuelle"

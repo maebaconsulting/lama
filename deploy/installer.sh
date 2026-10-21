@@ -332,6 +332,7 @@ etape "$(msg "Certificat HTTPS et heure du serveur" "HTTPS certificate and serve
 # de l'heure, règle polkit de Réglages > Heure. Sans certificat, lama démarrerait en http seul.
 # lama-certificat relance lama s'il tourne déjà (réinstallation) ; au premier passage il n'y a rien à relancer.
 installer_https_heure "$APP/actuelle" "$CONF" || echec "$(msg "Le certificat HTTPS n'a pas pu être fait. Corrigez la cause indiquée plus haut puis relancez sudo ./deploy/installer.sh." "The HTTPS certificate could not be made. Fix the cause shown above, then run sudo ./deploy/installer.sh again.")"
+approuver_autorite_localement "$CONF" || echo "$(msg "Le serveur n'a pas pu approuver lui-même le certificat de l'institut : sur son écran, passer par http://lama.local/certificat." "The server could not trust the institute certificate itself: on its own screen, go through http://lama.local/certificat.")"
 
 etape "$(msg "Disque de sauvegarde USB" "USB backup drive")"
 grep -q '^LABEL=LAMA-SAUVEGARDE ' /etc/fstab || printf '%s\n' "$LIGNE_FSTAB" >> /etc/fstab

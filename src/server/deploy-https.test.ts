@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { X509Certificate } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -214,5 +214,38 @@ test("procédures du technicien : certificat HTTPS et heure du serveur, dans les
     assert.match(doc, /50-lama-heure\.rules/);
     assert.doesNotMatch(doc, /\u2014/);
     assert.match(doc, /30(\u00a0| )(jours|days)/, "session et déclaration gardées 30 jours après le premier démarrage en https");
+  }
+});
+
+test("autorité approuvée par le serveur lui-même : magasin du système et règle de Firefox complétée, jamais écrasée (21/10/2026)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lama-autorite-locale-"));
+  mkdirSync(join(dir, "conf", "tls"), { recursive: true });
+  writeFileSync(join(dir, "conf", "tls", "autorite.crt"), "-----BEGIN CERTIFICATE-----\nessai\n-----END CERTIFICATE-----\n");
+  const firefox = join(dir, "etc", "firefox", "policies");
+  mkdirSync(firefox, { recursive: true });
+  writeFileSync(join(firefox, "policies.json"), JSON.stringify({ policies: { DisableTelemetry: true, Certificates: { Install: ["autre.crt"] } } }));
+  const env = { LAMA_CA_SYSTEME_DIR: join(dir, "systeme"), LAMA_FIREFOX_POLICIES_DIR: firefox };
+  for (let i = 0; i < 2; i++) assert.equal(shell(`umask 077; approuver_autorite_localement '${dir}/conf'`, env).status, 0, `passage ${i + 1}`);
+  assert.equal(statSync(join(firefox, "policies.json")).mode & 0o777, 0o644, "lisible par Firefox malgré un umask strict");
+  const neuf = join(dir, "neuf", "firefox", "policies");
+  assert.equal(shell(`umask 077; approuver_autorite_localement '${dir}/conf'`, { ...env, LAMA_FIREFOX_POLICIES_DIR: neuf }).status, 0);
+  for (const d of [join(dir, "neuf", "firefox"), neuf]) assert.equal(statSync(d).mode & 0o777, 0o755, `${d} créé lisible`);
+  assert.match(readFileSync(join(dir, "systeme", "lama-autorite.crt"), "utf8"), /BEGIN CERTIFICATE/);
+  assert.match(readFileSync(join(firefox, "lama-autorite.crt"), "utf8"), /BEGIN CERTIFICATE/);
+  const regles = JSON.parse(readFileSync(join(firefox, "policies.json"), "utf8"));
+  assert.deepEqual(regles, { policies: { DisableTelemetry: true, Certificates: { Install: ["autre.crt", join(firefox, "lama-autorite.crt")] } } }, "règles gardées, certificat ajouté une seule fois");
+
+  writeFileSync(join(firefox, "policies.json"), "{ illisible");
+  assert.equal(shell(`approuver_autorite_localement '${dir}/conf'`, env).status, 1, "règle illisible : échec signalé");
+  assert.equal(readFileSync(join(firefox, "policies.json"), "utf8"), "{ illisible", "jamais écrasée");
+  assert.equal(shell(`approuver_autorite_localement '${dir}/sans-certificat'`, env).status, 0, "sans autorité : rien à faire");
+});
+
+test("installation et mise à jour : l'autorité est approuvée par le serveur juste après le certificat, sans arrêter en cas d'échec", () => {
+  for (const nom of ["installer.sh", "mettre-a-jour.sh"]) {
+    const s = readFileSync(join(DEPLOY, nom), "utf8");
+    const certificat = s.indexOf("installer_https_heure \"$APP/");
+    const autorite = s.indexOf('approuver_autorite_localement "$CONF" || echo');
+    assert.ok(certificat > 0 && autorite > certificat, nom);
   }
 });

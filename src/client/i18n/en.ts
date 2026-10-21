@@ -1755,6 +1755,7 @@ export const en: Dictionary = {
   "mise_a_jour.disponible": "Available version",
   "mise_a_jour.publiee_le": "Published on {date}",
   "mise_a_jour.a_jour": "lama is up to date.",
+  "mise_a_jour.aucune_publiee": "No version published yet.",
   "mise_a_jour.verifiee_le": "Last check: {date}.",
   "mise_a_jour.jamais_verifiee": "No check yet.",
   "mise_a_jour.verifier": "Check now",

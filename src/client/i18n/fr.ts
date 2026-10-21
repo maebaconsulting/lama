@@ -1754,6 +1754,7 @@ export const fr = {
   "mise_a_jour.disponible": "Version disponible",
   "mise_a_jour.publiee_le": "Publiée le {date}",
   "mise_a_jour.a_jour": "lama est à jour.",
+  "mise_a_jour.aucune_publiee": "Aucune version publiée pour l'instant.",
   "mise_a_jour.verifiee_le": "Dernière vérification\u00a0: {date}.",
   "mise_a_jour.jamais_verifiee": "Aucune vérification pour l'instant.",
   "mise_a_jour.verifier": "Vérifier maintenant",

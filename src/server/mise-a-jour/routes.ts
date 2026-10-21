@@ -63,6 +63,8 @@ async function etatPublic(c: Ctx, m: MiseAJourEnv) {
     disponible: version === null ? null : { version, publiee_le: base.publiee_le, note: (requestLang(c) === "fr" ? base.note_fr : base.note_en) ?? "" },
     verifie_le: base.verifie_le,
     erreur: base.erreur ? localize(c, base.erreur) : null,
+    // Dernière vérification réussie et aucune version publiée : ni « à jour » ni erreur à l'écran.
+    aucune_publiee: base.verifie_le !== null && base.erreur === null && base.version === null,
   };
   if (currentAccount(c).role !== "admin") return lecture;
   const etat = lireEtat(m.dossier);

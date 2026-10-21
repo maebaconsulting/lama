@@ -26,11 +26,12 @@ test("dépôt et adresse : maebaconsulting/lama, ou la ligne DEPOT= du fichier d
   assert.equal(sourceDesVersions({ LAMA_MISE_A_JOUR_SOURCE: "http://127.0.0.1:9999/latest" }, true, "a/b"), "http://127.0.0.1:9999/latest");
 });
 
-test("consultation : réponse lue ; 404, JSON invalide, étiquette hors X.Y.Z, réponse lente, réseau coupé : erreur codée, jamais d'exception (M-12, M-16)", async () => {
+test("consultation : réponse lue ; 404 = aucune version publiée ; JSON invalide, étiquette hors X.Y.Z, réponse lente, réseau coupé : erreur codée, jamais d'exception (M-12, M-16)", async () => {
   const ok = await consulter({ source: "https://versions.exemple/latest", fetch: repondre(200, JSON.stringify(REPONSE)) });
   assert.deepEqual(ok, { ok: true, publiee: { version: "1.2.0", publiee_le: Date.parse("2026-11-02T09:00:00Z"), note_fr: "Agenda plus rapide.", note_en: "Faster calendar." } });
   const invalide = { ok: false, erreur: "@mise_a_jour.reponse_invalide" };
-  assert.deepEqual(await consulter({ source: "x", fetch: repondre(404, "{\"message\":\"Not Found\"}") }), invalide);
+  assert.deepEqual(await consulter({ source: "x", fetch: repondre(404, "{\"message\":\"Not Found\"}") }), { ok: true, publiee: null }, "dépôt sans version : pas une erreur");
+  assert.deepEqual(await consulter({ source: "x", fetch: repondre(500, "{}") }), invalide);
   assert.deepEqual(await consulter({ source: "x", fetch: repondre(200, "{pas du json") }), invalide);
   assert.deepEqual(await consulter({ source: "x", fetch: repondre(200, JSON.stringify({ ...REPONSE, tag_name: "v1.2.0-essai" })) }), invalide);
   assert.deepEqual(await consulter({ source: "x", fetch: repondre(200, "null") }), invalide);
