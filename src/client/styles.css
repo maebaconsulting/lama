@@ -198,6 +198,12 @@
 }
 
 @layer components {
+  /* Cases à cocher et boutons radio aux couleurs de lama (noir encre, ivoire en sombre),
+     jamais au bleu par défaut du navigateur. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--primary);
+  }
   /* Libellé en capitales espacées, comme la signature « Institut de beauté » */
   .etiquette {
     @apply font-sans text-xs uppercase;

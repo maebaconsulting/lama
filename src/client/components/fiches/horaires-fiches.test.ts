@@ -42,3 +42,11 @@ test("textes : mêmes clés en français et en anglais", () => {
     assert.ok(key in en, `en : ${key}`);
   }
 });
+
+test("prestations pratiquées : regroupées par catégorie, en pastilles, jamais en texte séparé par des virgules", () => {
+  assert.match(fiche, /byCategory\(/, "groupes du catalogue");
+  assert.match(fiche, /t\("prestation\.sans_categorie"\)/, "groupe sans catégorie nommé");
+  assert.match(fiche, /className="etiquette[^"]*"/, "titre de catégorie en étiquette");
+  assert.match(fiche, /<ul[^>]*flex-wrap/, "pastilles qui passent à la ligne");
+  assert.doesNotMatch(fiche, /pratiquees\.join\(", "\)/, "plus de liste en texte brut");
+});

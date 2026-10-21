@@ -11,6 +11,7 @@ import { todayAt } from "@/lib/calendrier";
 import { catalogCommands, telHref } from "@/lib/fiches";
 import { EMPTY } from "@/lib/format";
 import { STAFF_INKS, toInk } from "@/lib/inks";
+import { byCategory } from "@/lib/prestations";
 import { pathFor } from "@/lib/routes";
 import { canManageAppointments } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,8 @@ export function FicheMembre({ staff }: { staff: Staff }) {
   const { data: horairesData } = useLoad(() => api<{ institut: Semaine }>("GET", "/api/horaires"), ["settings"]);
   const [editHoraires, setEditHoraires] = useState(false);
   const [editPrestations, setEditPrestations] = useState(false);
-  const pratiquees = services.filter((s) => staff.service_ids.includes(s.id)).map((s) => pickText(lang, s.name, s.name_en));
+  // Prestations pratiquées, par catégorie du catalogue (inactives comprises, comme avant).
+  const groupes = byCategory(services.filter((s) => staff.service_ids.includes(s.id)), lang, { withInactive: true });
   const toggleEnLigne = async () => {
     try { await updateStaff(staff.id, { en_ligne: staff.en_ligne ? 0 : 1 }); } catch (err) { setError((err as Error).message); }
   };
@@ -125,7 +127,25 @@ export function FicheMembre({ staff }: { staff: Staff }) {
 
       <section className="space-y-3 border-t border-filet pt-4" aria-label={t("membre.prestations_pratiquees")}>
         <h3 className="text-sm font-medium">{t("membre.prestations_pratiquees")}</h3>
-        <p className="text-sm">{pratiquees.length ? pratiquees.join(", ") : t("membre.aucune_prestation")}</p>
+        {groupes.length === 0 ? (
+          <p className="text-sm">{t("membre.aucune_prestation")}</p>
+        ) : (
+          <div className="space-y-3">
+            {groupes.map((groupe) => {
+              const titre = groupe.category || t("prestation.sans_categorie");
+              return (
+                <div key={titre} className="space-y-1.5">
+                  <h4 className="etiquette text-encre-grise">{titre} <span className="chiffres">({groupe.services.length})</span></h4>
+                  <ul className="flex flex-wrap gap-1.5" aria-label={titre}>
+                    {groupe.services.map((s) => (
+                      <li key={s.id} className="border border-filet px-2 py-0.5 text-sm">{pickText(lang, s.name, s.name_en)}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {commands.manage && <Button variant="outline" onClick={() => setEditPrestations(true)}>{t("membre.modifier_prestations")}</Button>}
       </section>
 
