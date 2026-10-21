@@ -11,7 +11,15 @@ L'application, elle, suit la langue de chaque compte : chacun la choisit avec l
 ## Installer
 
 1. Installer Ubuntu Server 24.04, ou Ubuntu 24.04 ou 26.04 en version bureau, sur le mini-PC (compte de maintenance au choix, SSH activé : sur la version bureau, `sudo apt install openssh-server`). Le brancher au routeur par câble. Sur la version bureau, l'installation coupe la mise en veille.
-2. Sur le poste de développement, fabriquer l'archive avec `pnpm paquet`, puis la copier sur le serveur (`scp paquets/lama-….tar.gz technicien@adresse:`).
+2. **En une commande, depuis le dépôt public** (le mini-PC doit avoir accès à internet). Sur le serveur, dans un terminal (une session SSH interactive convient) :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh | sudo bash
+```
+
+   Le script pose Git et Node 24, télécharge le dépôt, fabrique le paquet, puis lance `deploy/installer.sh` depuis le dossier extrait, gardé dans `/var/lib/lama-installation`. Pour choisir le mode d'emblée : `… | sudo bash -s -- --auto` ou `… | sudo bash -s -- --assiste`. Passer ensuite directement au point 4.
+
+   **Ou, à partir d'une archive.** Sur le poste de développement, fabriquer l'archive avec `pnpm paquet`, puis la copier sur le serveur (`scp paquets/lama-….tar.gz technicien@adresse:`).
 3. Sur le serveur, dans un terminal (une session SSH interactive convient) :
 
 ```bash

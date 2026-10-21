@@ -11,7 +11,15 @@ The application itself follows the language of each account: everyone chooses it
 ## Install
 
 1. Install Ubuntu Server 24.04, or Ubuntu 24.04 or 26.04 desktop, on the mini PC (maintenance account of your choice, SSH enabled: on desktop, `sudo apt install openssh-server`). Connect it to the router with a cable. On desktop, the installation turns sleep off.
-2. On the development computer, build the archive with `pnpm paquet`, then copy it to the server (`scp paquets/lama-….tar.gz technicien@address:`).
+2. **In one command, from the public repository** (the mini PC needs internet access). On the server, in a terminal (an interactive SSH session is fine):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh | sudo bash
+```
+
+   The script installs Git and Node 24, downloads the repository, builds the package, then runs `deploy/installer.sh` from the extracted folder, kept in `/var/lib/lama-installation`. To pick the mode up front: `… | sudo bash -s -- --auto` or `… | sudo bash -s -- --assiste`. Then go straight to step 4.
+
+   **Or, from an archive.** On the development computer, build the archive with `pnpm paquet`, then copy it to the server (`scp paquets/lama-….tar.gz technicien@address:`).
 3. On the server, in a terminal (an interactive SSH session is fine):
 
 ```bash
