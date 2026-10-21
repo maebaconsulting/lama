@@ -224,7 +224,8 @@ test("autorité approuvée par le serveur lui-même : magasin du système et rè
   const firefox = join(dir, "etc", "firefox", "policies");
   mkdirSync(firefox, { recursive: true });
   writeFileSync(join(firefox, "policies.json"), JSON.stringify({ policies: { DisableTelemetry: true, Certificates: { Install: ["autre.crt"] } } }));
-  const env = { LAMA_CA_SYSTEME_DIR: join(dir, "systeme"), LAMA_FIREFOX_POLICIES_DIR: firefox };
+  // Magasin du système simulé : update-ca-certificates existe sur Linux (machine de GitHub) et exige root.
+  const env = { LAMA_CA_SYSTEME_DIR: join(dir, "systeme"), LAMA_FIREFOX_POLICIES_DIR: firefox, LAMA_MAJ_MAGASIN: "true" };
   for (let i = 0; i < 2; i++) assert.equal(shell(`umask 077; approuver_autorite_localement '${dir}/conf'`, env).status, 0, `passage ${i + 1}`);
   assert.equal(statSync(join(firefox, "policies.json")).mode & 0o777, 0o644, "lisible par Firefox malgré un umask strict");
   const neuf = join(dir, "neuf", "firefox", "policies");

@@ -60,7 +60,9 @@ approuver_autorite_localement() (
   [ -f "$AUTORITE" ] || return 0
   install -d -m 0755 "$SYSTEME" "$FIREFOX" || return 1
   install -m 0644 "$AUTORITE" "$SYSTEME/lama-autorite.crt" || return 1
-  if command -v update-ca-certificates >/dev/null 2>&1; then update-ca-certificates >/dev/null 2>&1 || return 1; fi
+  # Commande remplaçable par LAMA_MAJ_MAGASIN pour les essais (lancés sans root, sur Linux comme sur Mac).
+  local MAJ="${LAMA_MAJ_MAGASIN:-update-ca-certificates}"
+  if command -v "$MAJ" >/dev/null 2>&1; then "$MAJ" >/dev/null 2>&1 || return 1; fi
   install -m 0644 "$AUTORITE" "$FIREFOX/lama-autorite.crt" || return 1
   # Ajoute le certificat à policies.Certificates.Install ; un fichier illisible n'est pas touché.
   node -e '
