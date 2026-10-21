@@ -49,6 +49,8 @@ test("installation en ligne : paquet fabriqué par pnpm paquet, installer.sh bra
   assert.match(texte, /pnpm install --frozen-lockfile && pnpm paquet/);
   assert.match(texte, /\.\/deploy\/installer\.sh "\$@" <\/dev\/tty/);
   assert.match(texte, /: <\/dev\/tty/, "terminal vérifié avant toute installation");
+  const remise = texte.indexOf("stty sane </dev/tty");
+  assert.ok(remise > 0 && remise < texte.indexOf("./deploy/installer.sh \"$@\""), "terminal remis en état avant les questions (Entrée attendue)");
   assert.match(texte, /PNPM_VERSION=\d+\.\d+\.\d+/);
 });
 

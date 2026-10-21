@@ -72,6 +72,9 @@ principal() {
   etape "$(msg "Installation" "Installation")"
   cd "$DOSSIER"/lama-*/
   echo "$(msg "Dossier de la version : $PWD" "Version folder: $PWD")"
+  # La fabrication du paquet peut laisser le terminal sans conversion du retour chariot :
+  # Entrée n'y termine plus la ligne et chaque question attend sans fin (vu le 21/10/2026).
+  stty sane </dev/tty 2>/dev/null || true
   ./deploy/installer.sh "$@" </dev/tty
 }
 
