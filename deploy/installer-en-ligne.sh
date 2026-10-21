@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Installe lama sur un mini-PC Ubuntu 24.04 ou 26.04 en une commande, depuis le dépôt public :
-#   curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh | sudo bash
-# Options de installer.sh après « -s -- » (par exemple « | sudo bash -s -- --auto »).
+# Installe lama sur un mini-PC Ubuntu 24.04 ou 26.04 depuis le dépôt public, en deux commandes :
+#   curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh -o installer-en-ligne.sh
+#   sudo bash installer-en-ligne.sh            (ou --auto, --assiste : options de installer.sh)
+# Jamais « curl … | sudo bash » : sudo-rs d'Ubuntu 26.04 ne transmet alors plus le clavier
+# et la première question attend sans fin (vu le 21/10/2026) ; le script le refuse.
 # Pose Git et Node 24, clone le dépôt, fabrique le paquet (pnpm paquet), puis lance
-# deploy/installer.sh depuis le dossier extrait, branché sur le terminal (/dev/tty)
-# pour les questions et les clés de secours. LAMA_DEPOT (propriétaire/nom) et
+# deploy/installer.sh depuis le dossier extrait, dans le même terminal (questions et
+# clés de secours). LAMA_DEPOT (propriétaire/nom) et
 # LAMA_REF (branche ou étiquette) désignent une autre source, pour une recette.
 set -euo pipefail
 
@@ -33,15 +35,16 @@ source_valide() {
 }
 
 # Tout le travail est dans cette fonction, appelée à la dernière ligne : un
-# téléchargement coupé en route par « curl | bash » n'exécute rien.
+# fichier téléchargé à moitié n'exécute rien.
 principal() {
   local DEPOT="${LAMA_DEPOT:-$DEPOT_DEFAUT}" REF="${LAMA_REF:-$REF_DEFAUT}" DOSSIER SOURCE ARCHIVE NODE_MAJEURE
 
-  [ "$(id -u)" -eq 0 ] || echec "$(msg "Lancez ce script avec sudo (… | sudo bash)." "Run this script with sudo (… | sudo bash).")"
+  [ "$(id -u)" -eq 0 ] || echec "$(msg "Lancez ce script avec sudo bash installer-en-ligne.sh." "Run this script with sudo bash installer-en-ligne.sh.")"
+  # Les questions et les clés de secours passent par le terminal : le script doit le recevoir
+  # en entrée, ce qui exclut « curl … | sudo bash ».
+  [ -t 0 ] && [ -t 1 ] || echec "$(msg "Téléchargez le script puis lancez-le dans un terminal : curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh -o installer-en-ligne.sh puis sudo bash installer-en-ligne.sh" "Download the script, then run it in a terminal: curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh -o installer-en-ligne.sh then sudo bash installer-en-ligne.sh")"
   grep -q -E '^VERSION_ID="(24|26)\.04"' /etc/os-release || echec "$(msg "Ce script attend Ubuntu 24.04 ou 26.04." "This script expects Ubuntu 24.04 or 26.04.")"
   source_valide "$DEPOT" "$REF" || echec "$(msg "Source invalide : LAMA_DEPOT=propriétaire/nom, LAMA_REF=branche ou étiquette." "Invalid source: LAMA_DEPOT=owner/name, LAMA_REF=branch or tag.")"
-  # Les clés de secours s'affichent à l'écran : il faut un vrai terminal, même quand le script arrive par un tube.
-  { : </dev/tty; } 2>/dev/null || echec "$(msg "Lancez l'installation dans un terminal, les clés s'affichent à l'écran une seule fois." "Run the installation in a terminal, the keys are shown on screen only once.")"
 
   etape "$(msg "Git et Node 24" "Git and Node 24")"
   export DEBIAN_FRONTEND=noninteractive
@@ -74,11 +77,11 @@ principal() {
   echo "$(msg "Dossier de la version : $PWD" "Version folder: $PWD")"
   # La fabrication du paquet peut laisser le terminal sans conversion du retour chariot :
   # Entrée n'y termine plus la ligne et chaque question attend sans fin (vu le 21/10/2026).
-  stty sane </dev/tty 2>/dev/null || true
-  ./deploy/installer.sh "$@" </dev/tty
+  stty sane 2>/dev/null || true
+  ./deploy/installer.sh "$@"
 }
 
-# Chargé par « source » (essais), le script s'arrête ici ; par « curl | bash », BASH_SOURCE est vide et il continue.
+# Chargé par « source » (essais), le script s'arrête ici.
 [ "${BASH_SOURCE:-$0}" = "$0" ] || return 0
 
 principal "$@"

@@ -14,10 +14,11 @@ The application itself follows the language of each account: everyone chooses it
 2. **In one command, from the public repository** (the mini PC needs internet access). On the server, in a terminal (an interactive SSH session is fine):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/maebaconsulting/lama/main/deploy/installer-en-ligne.sh -o installer-en-ligne.sh
+sudo bash installer-en-ligne.sh
 ```
 
-   The script installs Git and Node 24, downloads the repository, builds the package, then runs `deploy/installer.sh` from the extracted folder, kept in `/var/lib/lama-installation`. To pick the mode up front: `… | sudo bash -s -- --auto` or `… | sudo bash -s -- --assiste`. Then go straight to step 4.
+   The script installs Git and Node 24, downloads the repository, builds the package, then runs `deploy/installer.sh` from the extracted folder, kept in `/var/lib/lama-installation`. To pick the mode up front: `sudo bash installer-en-ligne.sh --auto` or `--assiste`. Do not pipe the script into sudo (`curl … | sudo bash`): on Ubuntu 26.04 the keyboard no longer reaches it, and the script refuses it. Then go straight to step 4.
 
    **Or, from an archive.** On the development computer, build the archive with `pnpm paquet`, then copy it to the server (`scp paquets/lama-….tar.gz technicien@address:`).
 3. On the server, in a terminal (an interactive SSH session is fine):
