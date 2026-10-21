@@ -60,7 +60,7 @@ test("« À envoyer à la main » : « Ouvrir WhatsApp » suspend d'abord l'envo
 });
 
 test("pastille sur les Réglages (rail, « Plus » du téléphone) et bandeau de session pour la gérante et la réception", () => {
-  assert.match(read("../cadre/rail.tsx"), /view === "reglages" \? <CompteurAEnvoyer \/>/);
+  assert.match(read("../cadre/rail.tsx"), /view === "reglages" \? <><CompteurAEnvoyer \/><PastilleMiseAJour \/><\/>/);
   const telephone = read("../cadre/telephone.tsx");
   assert.match(telephone, /\{views\.includes\("reglages"\) && <CompteurAEnvoyer \/>\}/);
   assert.match(telephone, /\{view === "reglages" && <CompteurAEnvoyer \/>\}/);

@@ -3,7 +3,7 @@ import { PNG } from "pngjs";
 import type { Database } from "../storage.ts";
 import { deviseActive } from "../../shared/devise-active.ts";
 import { semaineProblem, type Semaine } from "../../shared/horaires.ts";
-import { texteSur, type ThemeEnLigne } from "../../shared/en-ligne.ts";
+import { AFFICHAGE_DEFAUT, texteSur, type AffichageEnLigne, type ThemeEnLigne } from "../../shared/en-ligne.ts";
 import type { ImageType } from "../images.ts";
 import { decodeImage, type Rgba } from "../impression/image-logo.ts";
 import { logoVersions, readLogo, type LogoVariant } from "../institut/logos.ts";
@@ -24,7 +24,7 @@ export type PraticiennePubliee = { id: string; prenom: string; photo: null; pres
 export type InstitutPublie = {
   nom: string; fuseau: string; telephone: string; logo: string | null;
   devise: { code: string; decimales: number; symbole: string; position: "avant" | "apres" };
-  langues: ("fr" | "en")[]; texte_donnees: TexteBilingue; theme?: ThemeEnLigne; horaires: Semaine;
+  langues: ("fr" | "en")[]; texte_donnees: TexteBilingue; theme?: ThemeEnLigne; affichage?: AffichageEnLigne; horaires: Semaine;
 };
 export type CorpsOffre = { institut: InstitutPublie; prestations: PrestationPubliee[]; praticiennes: PraticiennePubliee[] };
 
@@ -90,6 +90,8 @@ function institutPublie(cfg: ConfigEnLigne, logo: string | null): InstitutPublie
     devise: { code: d.code, decimales: d.decimales, symbole: d.symbole, position: d.position },
     langues: ["fr", "en"], texte_donnees: texte(cfg.texteDonnees.fr, cfg.texteDonnees.en),
     ...(cfg.theme ? { theme: cfg.theme } : {}),
+    // Publiée seulement si elle change quelque chose : l'offre d'un salon qui garde la mise en page d'origine reste la même.
+    ...(cfg.affichage.entete !== AFFICHAGE_DEFAUT.entete || cfg.affichage.largeur !== AFFICHAGE_DEFAUT.largeur ? { affichage: { ...cfg.affichage } } : {}),
     horaires: cfg.institut.horaires,
   };
 }

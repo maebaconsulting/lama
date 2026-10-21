@@ -1,0 +1,10 @@
+[Unit]
+Description=lama, mise à jour par le réseau (demande de l'application, ou nuit en mode automatique)
+After=network-online.target lama-sauvegarde.service lama-certificat.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lama/actuelle/deploy/mise-a-jour-reseau.sh
+# Attente du verrou (1 h au plus), téléchargements (3 x 30 min au plus), sauvegarde et installation.
+TimeoutStartSec=4h

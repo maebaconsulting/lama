@@ -58,6 +58,7 @@ const AUDIT_ACTIONS = [
   "creneau.suppression", "produit.suppression", "produit.prix", "produit.stock", "heure.reglee", "heure.refus",
   "en_ligne.confirmation", "en_ligne.autre_horaire", "en_ligne.refus", "en_ligne.cloture", "en_ligne.rendez_vous",
   "supplement.libre",
+  "mise_a_jour.demandee", "mise_a_jour.reussie", "mise_a_jour.echec", "mise_a_jour.mode",
 ];
 
 /** Action du journal (code stocké par le serveur) ; un code inconnu est rendu tel quel. */
@@ -126,8 +127,14 @@ const AUDIT_TARGET_KEYS: Record<string, Key> = {
   "en_ligne.texte_donnees.en": "journal.cible.en_ligne_texte_en",
   "en_ligne.adresse": "journal.cible.en_ligne_adresse",
   "en_ligne.theme": "journal.cible.en_ligne_theme",
+  "en_ligne.entete": "journal.cible.en_ligne_entete",
+  "en_ligne.largeur": "journal.cible.en_ligne_largeur",
   "en_ligne.salon": "journal.cible.en_ligne_salon",
   "en_ligne.cle": "journal.cible.en_ligne_cle",
+  // Mode de mise à jour : nom du réglage (règle de reglages-cadre.test.ts), puis le mode écrit par l'action « mise_a_jour.mode ».
+  "mise_a_jour.mode": "journal.cible.mise_a_jour_mode",
+  manuel: "journal.cible.mise_a_jour_manuel",
+  automatique: "journal.cible.mise_a_jour_automatique",
   "waha.adresse": "journal.cible.waha_adresse",
   "waha.cle": "journal.cible.waha_cle",
   "waha.session": "journal.cible.waha_session",

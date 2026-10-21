@@ -12,6 +12,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/langue.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/waha.sh"
 # HTTPS et heure du serveur (installer_https_heure, lama_repond).
 source "$(dirname "${BASH_SOURCE[0]}")/https-heure.sh"
+# Forme des versions (version_valide, spec du 21/10/2026, M-1).
+source "$(dirname "${BASH_SOURCE[0]}")/verification.sh"
+# Mise à jour par le réseau (poser_mise_a_jour_reseau).
+source "$(dirname "${BASH_SOURCE[0]}")/mise-a-jour-pose.sh"
 
 SOURCE="$(cd "$(dirname "$0")/.." && pwd -P)"
 APP=/opt/lama
@@ -194,7 +198,7 @@ demander_texte() {
 grep -q -E '^VERSION_ID="(24|26)\.04"' /etc/os-release || echec "$(msg "Ce script attend Ubuntu 24.04 ou 26.04." "This script expects Ubuntu 24.04 or 26.04.")"
 [ -f "$SOURCE/VERSION" ] && [ -f "$SOURCE/dist-server/main.mjs" ] || echec "$(msg "Archive incomplète, lancez le script depuis le dossier extrait." "Incomplete archive, run the script from the extracted folder.")"
 VERSION="$(cat "$SOURCE/VERSION")"
-[[ "$VERSION" =~ ^[0-9]{8}-[0-9]{4}-[0-9a-f]+$ ]] || echec "$(msg "VERSION invalide dans l'archive, refabriquez le paquet avec pnpm paquet." "Invalid VERSION in the archive, rebuild the package with pnpm paquet.")"
+version_valide "$VERSION" || echec "$(msg "VERSION invalide dans l'archive, refabriquez le paquet avec pnpm paquet." "Invalid VERSION in the archive, rebuild the package with pnpm paquet.")"
 [ "$SOURCE" != "$APP/versions/$VERSION" ] || echec "$(msg "N'installez pas depuis $APP, copiez d'abord l'archive ailleurs puis relancez depuis le dossier extrait." "Do not install from $APP, copy the archive elsewhere first, then run again from the extracted folder.")"
 # Relancer l'installation ne sert qu'à réinstaller la version en service (ou à
 # reprendre le disque de sauvegarde). Une autre version passe par
@@ -367,10 +371,12 @@ fi
 etape "$(msg "Services" "Services")"
 install -m 0644 "$APP/actuelle/deploy/systemd/lama.service" "$APP/actuelle/deploy/systemd/lama-sauvegarde.service" "$APP/actuelle/deploy/systemd/lama-sauvegarde.timer" \
   "$APP/actuelle/deploy/systemd/lama-certificat.service" "$APP/actuelle/deploy/systemd/lama-certificat.timer" /etc/systemd/system/
+install -m 0644 "$APP/actuelle/deploy/systemd/lama-mise-a-jour.service" "$APP/actuelle/deploy/systemd/lama-mise-a-jour.path" "$APP/actuelle/deploy/systemd/lama-mise-a-jour.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable lama.service lama-sauvegarde.timer lama-certificat.timer
 systemctl restart lama.service
 systemctl start lama-sauvegarde.timer lama-certificat.timer
+poser_mise_a_jour_reseau "$DATA" "$COMPTE" /var/cache/lama-mise-a-jour || echec "$(msg "La mise à jour depuis l'application n'a pas pu être posée. Corrigez la cause indiquée plus haut, puis relancez sudo ./deploy/installer.sh." "Updates from the application could not be set up. Fix the cause shown above, then run sudo ./deploy/installer.sh again.")"
 
 etape "$(msg "Vérification" "Check")"
 lama_repond "$CONF" || echec "$(msg "Le service ne répond pas en https. Consultez journalctl -u lama -n 50" "The service does not respond over https. See journalctl -u lama -n 50")"

@@ -40,6 +40,7 @@ const SECTION_SLUGS: Record<SectionId, Record<Lang, string>> = {
   "file-envoi": { fr: "file-envoi", en: "outbox" },
   sauvegardes: { fr: "sauvegardes", en: "backups" },
   heure: { fr: "heure", en: "time" },
+  "mise-a-jour": { fr: "mise-a-jour", en: "updates" },
   formation: { fr: "formation", en: "training" },
   connexions: { fr: "connexions", en: "connections" },
   journal: { fr: "journal", en: "access-log" },

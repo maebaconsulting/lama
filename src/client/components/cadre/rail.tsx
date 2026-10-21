@@ -18,7 +18,7 @@ import { THEME_ICONS, THEME_KEYS, useChoixTheme } from "@/components/choix-theme
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTheme } from "../../theme-provider";
 import type { View } from "../../types";
-import { CompteurAEnvoyer, CompteurStockBas, navIcon, saveOwnLang } from "./navigation";
+import { CompteurAEnvoyer, CompteurStockBas, PastilleMiseAJour, navIcon, saveOwnLang } from "./navigation";
 
 const LONG_PRESS_MS = 500;
 const HINT_AFTER_PRESS_MS = 1500;
@@ -178,7 +178,7 @@ export function Rail({ currentView, folded = false }: { currentView: View; folde
             onClick={() => navigate(pathFor(view, lang))}
             hint={handlers}
             ignoreClick={ignoreClick}
-            extra={view === "products" ? <CompteurStockBas /> : view === "reglages" ? <CompteurAEnvoyer /> : undefined}
+            extra={view === "products" ? <CompteurStockBas /> : view === "reglages" ? <><CompteurAEnvoyer /><PastilleMiseAJour /></> : undefined}
             extraLabel={view === "products" && lowStock > 0 ? tn("stock_bas.pastille", lowStock) : undefined}
           />
         ))}

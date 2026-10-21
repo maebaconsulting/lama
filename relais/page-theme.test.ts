@@ -25,3 +25,17 @@ test("page d'un salon : à ses couleurs et à sa police avec un thème, charte d
   assert.equal(await (await r.app.request("/voisin/")).text(), PAGE, "l'autre salon garde la charte");
   assert.equal((await r.app.request("/inconnu/")).status, 404);
 });
+
+test("page d'un salon : mise en page posée sur <html> par le serveur ; vitrine qui la rend ; sans elle, page inchangée", async () => {
+  const r = await relaisEssai({ etat: "actif", page: async (nom) => (nom === "index.html" ? PAGE : null) });
+  const depot = new Depot(r.base, "eclat");
+  const o = offreEssai(1);
+  await depot.ecrireDocument("offre", 1, Offre.parse({ ...o, institut: { ...o.institut, affichage: { entete: false, largeur: "pleine" } } }), MAINTENANT);
+  assert.match(await (await r.app.request("/eclat/")).text(), /<html lang="fr" data-entete="non" data-largeur="pleine">/);
+  assert.deepEqual((await (await r.app.request("/api/eclat/vitrine")).json()).institut.affichage, { entete: false, largeur: "pleine" });
+  await depot.ecrireDocument("offre", 2, Offre.parse({ ...o, institut: { ...o.institut, affichage: { entete: true, largeur: "pleine" } } }), MAINTENANT);
+  assert.match(await (await r.app.request("/eclat/")).text(), /<html lang="fr" data-largeur="pleine">/);
+  await depot.ecrireDocument("offre", 3, offreEssai(3), MAINTENANT);
+  assert.equal(await (await r.app.request("/eclat/")).text(), PAGE);
+  assert.equal((await (await r.app.request("/api/eclat/vitrine")).json()).institut.affichage, null);
+});

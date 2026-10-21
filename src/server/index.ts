@@ -52,6 +52,7 @@ import { mountTransferRoutes } from "./transferts-routes.ts";
 import { mountDemandesRoutes } from "./en-ligne/routes.ts";
 import { mountReglagesEnLigneRoutes } from "./en-ligne/routes-reglages.ts";
 import { mountHeureRoutes } from "./heure/routes.ts";
+import { mountMiseAJourRoutes, type MiseAJourEnv } from "./mise-a-jour/routes.ts";
 import { mountFormationRoutes } from "./formation/routes.ts";
 import { installerCoupuresFormation } from "./formation/coupures.ts";
 import { installerProtectionsDemo } from "./formation/protections-demo.ts";
@@ -69,8 +70,9 @@ import { HTTPException } from "hono/http-exception";
 // `WHATSAPP_FETCH` : jamais posée en production ; les tests y mettent le faux WAHA (sous-projet 7 § 4).
 // `SMS_FETCH` : jamais posée en production ; les essais y mettent la fausse passerelle.
 // `EN_LIGNE_FETCH` : jamais posée en production ; les essais y mettent le relais d'essai en mémoire (réservation en ligne).
+// `MISE_A_JOUR` : mise à jour par le réseau, posée par boot.ts hors formation ; les essais y mettent un faux serveur des versions.
 // `HORLOGE` : horloge du système (`timedatectl`), posée par boot.ts ; les essais y mettent une fausse (distribution D-12).
-export type AppBindings = { STORAGE: StorageBinding; MASTER_KEY?: Uint8Array; CLOCK?: () => number; BACKUP?: BackupEnv; RENDER_TICKET?: typeof renderTicket; WHATSAPP_FETCH?: typeof fetch; SMS_FETCH?: typeof fetch; HORLOGE?: HorlogeSysteme; EN_LIGNE_FETCH?: (url: string, init: RequestInit) => Promise<Response> };
+export type AppBindings = { STORAGE: StorageBinding; MASTER_KEY?: Uint8Array; CLOCK?: () => number; BACKUP?: BackupEnv; RENDER_TICKET?: typeof renderTicket; WHATSAPP_FETCH?: typeof fetch; SMS_FETCH?: typeof fetch; HORLOGE?: HorlogeSysteme; EN_LIGNE_FETCH?: (url: string, init: RequestInit) => Promise<Response>; MISE_A_JOUR?: MiseAJourEnv };
 type Env = { Bindings: AppBindings; Variables: { account: Account | null; session: Session | null; device: { id: number; name: string } | null } };
 
 const APP_INFO = {
@@ -185,6 +187,7 @@ mountTransferRoutes(app);
 mountDemandesRoutes(app);
 mountReglagesEnLigneRoutes(app);
 mountHeureRoutes(app);
+mountMiseAJourRoutes(app);
 mountFormationRoutes(app);
 
 // Erreur levée avec un message du dictionnaire (`MessageError`) sans gestionnaire

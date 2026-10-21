@@ -161,8 +161,22 @@ The reset is also available in the application: account `formation.admin`, Setti
 
 ## Update
 
-1. On the development computer: `pnpm paquet`, then copy the archive to the server.
-2. On the server:
+### From the application
+
+Once the mechanism is set up (installation, or a first update done by hand below on a server installed before), the administrator updates lama without a terminal: Settings, “Updates”, “Check now”, then “Update to X.Y.Z” (tick box, password asked again). The “Automatic at night (3:30 am)” mode does the same every night, with nobody around.
+
+Only versions published and signed by the lama publisher are offered. The `lama-mise-a-jour` service (root, started by the application or by the night timer) downloads the version from GitHub, checks its signature with the key of the running version then its checksums, and runs `mettre-a-jour.sh` from the new version: backup, installation, restart, check and rollback, as by hand. During the restart, every screen shows “Maintenance in progress”. The section shows the current step, then the result and, if it failed, the reason. The service stops by itself after 4 hours at most.
+
+Service log: `journalctl -u lama-mise-a-jour -n 100`. State of the last operation: `/var/lib/lama/mise-a-jour/etat.json`.
+
+Acceptance testing on a test repository only: the root file `/etc/lama/mise-a-jour.conf`, absent normally, points to another GitHub repository with a `DEPOT=owner/name` line; the application and the service both read it.
+
+### By hand
+
+For the first update of a server installed before updates from the application (it sets the mechanism up), for a server without internet, or for a development package.
+
+1. Copy the four files of the version, taken from the lama releases page on GitHub, into one folder on the server: `lama-X.Y.Z.tar.gz`, `NOTES.md`, `SHA256SUMS` and `SHA256SUMS.sig`. Development package: `pnpm paquet` on the development computer, then copy the archive.
+2. On the server, in that folder:
 
 Run the update inside `tmux` (or `screen`): if the SSH session drops half-way, the script goes on and you get its output back with `tmux attach`. Install `tmux` once and for all with `sudo apt-get install -y tmux` if it is missing.
 
@@ -173,9 +187,11 @@ cd lama-NOUVELLE/
 sudo ./deploy/mettre-a-jour.sh
 ```
 
-The script backs up first. If that backup fails only because of the USB drive (missing or failed), the update still goes on, the Google Drive copy staying in the queue. If it fails for any other reason, the update is cancelled: nothing is changed.
+The script first checks the archive: signature of `SHA256SUMS` by the key of the running version, checksums of the archive and of the notes, then an extracted folder identical to the archive (any symbolic link in that folder is refused). An X.Y.Z version without these files is refused; a development package goes through with a warning. A server installed before signed versions has no key yet: run by hand, the script uses the archive's key and says so with a warning (this detects a damaged archive, not a forged one; comparing its checksum with the one on the releases page only rules out a damaged archive, since it comes from the same source; to rule out a forged archive, get the archive's checksum from the publisher through another channel, phone or message, and compare it with the output of `sha256sum lama-X.Y.Z.tar.gz`); the application's service always refuses in that case, hence this first update by hand. The `--sans-signature` option is for tests only. One update at a time: if another one is running (from the application or another terminal), the script stops and says so.
 
-It then installs the new version next to the old ones, makes the HTTPS certificate if it is missing (or renews it at the threshold), restarts, and checks that the application responds. Otherwise it goes back to the previous version by itself. If the new version had changed the structure of the database, the copy made before the update is put back automatically on that rollback; the database changed by the new version is kept next to it, under the name `lama.db.migree-AAAAMMJJ-HHMMSS` (with its `-wal` and `-shm` files if any). Only recent versions are kept in `/opt/lama/versions` (the last three, plus the running version and the previous one).
+The script then backs up. If that backup fails only because of the USB drive (missing or failed), the update still goes on, the Google Drive copy staying in the queue. If it fails for any other reason, the update is cancelled: nothing is changed.
+
+It then installs the new version next to the old ones, makes the HTTPS certificate if it is missing (or renews it at the threshold), restarts, and checks that the application responds. Otherwise it goes back to the previous version by itself. If the new version had changed the structure of the database, the copy made before the update is put back automatically on that rollback; the database changed by the new version is kept next to it, under the name `lama.db.migree-AAAAMMJJ-HHMMSS` (with its `-wal` and `-shm` files if any). Only recent versions are kept in `/opt/lama/versions` (the last three installed, plus the running version and the previous one). Last, it sets up updates from the application, if missing.
 
 ### First update to HTTPS
 

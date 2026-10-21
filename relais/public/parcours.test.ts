@@ -131,7 +131,7 @@ test("« Demande reçue » : « dès l'ouverture » quand l'institut est fermé 
   assert.equal(texteRecu(false, true), "recu.ouverture");
   assert.equal(texteRecu(true, false), "recu.rappel");
   assert.equal(texteRecu(true, true), "recu.rappel_ouverture");
-  assert.equal(t("fr", "recu.ouverture"), "L'institut vous répond dès l'ouverture, par WhatsApp.");
+  assert.equal(t("fr", "recu.ouverture"), "Dès l'ouverture, nous vérifions la disponibilité et revenons vers vous pour confirmer votre rendez-vous.");
   assert.equal(t("en", "recu.rappel_ouverture"), "The institute will call you back as soon as it opens.");
 });
 

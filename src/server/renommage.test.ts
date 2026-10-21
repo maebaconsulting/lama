@@ -37,7 +37,7 @@ test("renommage lama : plus aucun ancien nom technique dans le code, les scripts
 
 test("renommage lama : paquet npm « lama », services lama", () => {
   assert.equal(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).name, "lama");
-  assert.deepEqual(readdirSync(join(ROOT, "deploy/systemd")).sort(), ["lama-certificat.service", "lama-certificat.timer", "lama-formation.service", "lama-sauvegarde.service", "lama-sauvegarde.timer", "lama.service"]);
+  assert.deepEqual(readdirSync(join(ROOT, "deploy/systemd")).sort(), ["lama-certificat.service", "lama-certificat.timer", "lama-formation.service", "lama-mise-a-jour.path", "lama-mise-a-jour.service", "lama-mise-a-jour.timer", "lama-sauvegarde.service", "lama-sauvegarde.timer", "lama.service"]);
 });
 
 test("le garde-fou repère les anciens noms techniques (fabriqués à partir d'octets), pas les nouveaux ni les numéros de facture", () => {

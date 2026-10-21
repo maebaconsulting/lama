@@ -13,7 +13,7 @@ export const ROLE_KEYS: Record<Role, Key> = {
   practitioner: "role.practitioner",
 };
 
-export type SectionId = "institut" | "caisse" | "fidelite" | "whatsapp" | "en-ligne" | "import" | "comptes" | "postes" | "a-envoyer" | "file-envoi" | "sauvegardes" | "heure" | "formation" | "connexions" | "journal" | "mon-compte";
+export type SectionId = "institut" | "caisse" | "fidelite" | "whatsapp" | "en-ligne" | "import" | "comptes" | "postes" | "a-envoyer" | "file-envoi" | "sauvegardes" | "heure" | "mise-a-jour" | "formation" | "connexions" | "journal" | "mon-compte";
 
 const EVERYONE: Role[] = ["admin", "manager", "reception", "practitioner"];
 
@@ -21,7 +21,7 @@ const EVERYONE: Role[] = ["admin", "manager", "reception", "practitioner"];
  * Rubriques des Réglages dans l'ordre d'affichage, avec les rôles qui les voient (spec 2 § 4) ;
  * `formation` : seulement dans la base de formation (distribution D-19).
  */
-export const SECTIONS: { id: SectionId; labelKey: Key; roles: Role[]; formation?: true }[] = [
+export const SECTIONS: { id: SectionId; labelKey: Key; roles: Role[]; formation?: true; horsFormation?: true }[] = [
   { id: "institut", labelKey: "reglages.rubrique.institut", roles: ["manager"] },
   // Caisse : réglages de la gérante ; l'administrateur y règle le préfixe des factures (distribution D-01).
   { id: "caisse", labelKey: "reglages.rubrique.caisse", roles: ["manager", "admin"] },
@@ -40,6 +40,9 @@ export const SECTIONS: { id: SectionId; labelKey: Key; roles: Role[]; formation?
   { id: "sauvegardes", labelKey: "reglages.rubrique.sauvegardes", roles: ["admin"] },
   // Heure du serveur (distribution D-12) : correction par l'administrateur, mot de passe retapé.
   { id: "heure", labelKey: "reglages.rubrique.heure", roles: ["admin"] },
+  // Mise à jour par le réseau (spec du 21/10/2026, M-14 à M-16) : l'administrateur fait tout, la gérante lit les versions ;
+  // jamais dans la base de formation, qui suit la version du service principal.
+  { id: "mise-a-jour", labelKey: "reglages.rubrique.mise_a_jour", roles: ["admin", "manager"], horsFormation: true },
   // Remise à zéro de la base de formation (distribution D-19) : son administrateur, mot de passe retapé.
   { id: "formation", labelKey: "reglages.rubrique.formation", roles: ["admin"], formation: true },
   { id: "connexions", labelKey: "reglages.rubrique.connexions", roles: ["admin"] },
@@ -49,7 +52,7 @@ export const SECTIONS: { id: SectionId; labelKey: Key; roles: Role[]; formation?
 
 /** Rubriques permises au rôle ; `formation` : l'écran sert la base de formation (`useFormation`). */
 export function sectionsFor(role: Role, formation = false) {
-  return SECTIONS.filter((s) => s.roles.includes(role) && (s.formation !== true || formation));
+  return SECTIONS.filter((s) => s.roles.includes(role) && (s.formation !== true || formation) && (s.horsFormation !== true || !formation));
 }
 
 /**

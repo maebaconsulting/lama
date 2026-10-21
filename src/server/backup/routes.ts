@@ -18,6 +18,12 @@ export interface BackupEnv { usbDir: string; tmpDir: string; dataDir: string; re
 const ALERT_AFTER_MS = 36 * 3600e3;
 const NAME = /^lama-\d{8}-\d{4}\.db\.gz\.age$/;
 
+let sauvegardesManuelles = 0;
+/** Vrai pendant « Sauvegarder maintenant » (la sauvegarde de nuit se lit dans systemd, mise-a-jour/systeme.ts). */
+export function sauvegardeManuelleEnCours(): boolean {
+  return sauvegardesManuelles > 0;
+}
+
 function env(c: Context): BackupEnv {
   const b = (c.env as { BACKUP?: BackupEnv }).BACKUP;
   if (!b) throw new MessageError("sauvegarde.non_configurees");
@@ -77,10 +83,16 @@ export function mountBackupRoutes(app: OpenAPIHono<any>): void {
     // Même règle que la sauvegarde de nuit (décision 15) : sans destination réglée, pas d'envoi Drive.
     const driveConfigured = (await get("SELECT key FROM settings WHERE key = 'technique.drive_remote'")) != null;
     const remote = driveConfigured ? await getSetting<string>("technique.drive_remote") : null;
-    const result = await runBackup({
-      run: (sql, params) => run(sql, params), recipient: b.recipient, usbDir: b.usbDir, tmpDir: b.tmpDir,
-      remote, now: nowOf(c),
-    });
+    sauvegardesManuelles++;
+    let result: Awaited<ReturnType<typeof runBackup>>;
+    try {
+      result = await runBackup({
+        run: (sql, params) => run(sql, params), recipient: b.recipient, usbDir: b.usbDir, tmpDir: b.tmpDir,
+        remote, now: nowOf(c),
+      });
+    } finally {
+      sauvegardesManuelles--;
+    }
     await logAudit({ accountId: currentAccount(c).id, action: "sauvegarde", ip: clientIp(c), now: nowOf(c) });
     return c.json(result);
   });

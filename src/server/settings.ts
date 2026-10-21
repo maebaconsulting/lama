@@ -6,7 +6,7 @@ import { clientIp, currentAccount, requireConfirmation } from "./auth/middleware
 import { logAudit } from "./audit.ts";
 import { nowOf } from "./clock.ts";
 import { coded, localize, montant, msg, type MessageKey } from "./messages.ts";
-import { adresseRelaisValide, MOTIF_SALON, problemeTheme, TEXTE_DONNEES } from "../shared/en-ligne.ts";
+import { adresseRelaisValide, LARGEURS, MOTIF_SALON, problemeTheme, TEXTE_DONNEES } from "../shared/en-ligne.ts";
 import { DEFAULT_TEXTS, templateProblem, textSetting, TEMPLATE_KINDS } from "./whatsapp/textes.ts";
 import { parseAddress } from "./impression/imprimante.ts";
 import { parseLocalAddress } from "./reseau-local.ts";
@@ -32,8 +32,8 @@ type Def = {
   validate?: (v: unknown) => string | null;
   normalize?: (v: unknown) => unknown;
   frozen?: (db: Database) => { numero: string } | null;
-  /** Réglage écrit seulement par sa route dédiée (devise : `PUT /api/devise`, qui convertit le catalogue). */
-  dedicated?: true;
+  /** Réglage écrit seulement par sa route dédiée : refus de la route générique, avec ce message (devise : `PUT /api/devise`). */
+  dedicated?: MessageKey;
 };
 
 const text = (max: number) => (v: unknown) => (typeof v === "string" && v.length <= max ? null : coded("reglage.texte_long", { max }));
@@ -90,7 +90,7 @@ export const SETTING_DEFS: Record<string, Def> = {
   // Horaires d'ouverture (réservation en ligne, spec du 16/10/2026 § 4.1) : écrits par la gérante, lus par tous pour griser l'agenda.
   "institut.horaires": { roles: ["manager"], read: ["admin", "reception", "practitioner"], secret: false, default: SEMAINE_DEFAUT, validate: (v) => (semaineProblem(v) ? coded("reglage.horaires") : null) },
   // Devise (spec du 15/10/2026) : choisie à l'installation, changée par `PUT /api/devise` tant que rien ne la fige.
-  "institut.devise": { roles: ["admin", "manager"], secret: false, default: DEVISE_DEFAUT, validate: (v) => (estCodeDevise(v) ? null : coded("reglage.devise")), frozen: deviseFigeePar, dedicated: true },
+  "institut.devise": { roles: ["admin", "manager"], secret: false, default: DEVISE_DEFAUT, validate: (v) => (estCodeDevise(v) ? null : coded("reglage.devise")), frozen: deviseFigeePar, dedicated: "devise.route" },
   "affichage.symbole_position": { roles: ["admin", "manager"], secret: false, default: null, validate: (v) => (v === null || v === "avant" || v === "apres" ? null : coded("reglage.symbole_position")) },
   "affichage.symbole_ecran": { roles: ["admin", "manager"], secret: false, default: true, validate: yesNo },
   // Marque à l'écran (renommage lama) : « logo et nom » ou « logo seul » ; lue sans session par l'écran de connexion.
@@ -143,8 +143,14 @@ export const SETTING_DEFS: Record<string, Def> = {
   "en_ligne.texte_donnees.en": { roles: ["manager"], secret: false, default: TEXTE_DONNEES.en, validate: texteDonnees },
   "en_ligne.adresse": { roles: ["manager"], read: ["admin"], secret: false, default: "", validate: (v) => (adresseRelaisValide(v) ? null : coded("reglage.en_ligne_adresse")) },
   "en_ligne.theme": { roles: ["manager"], secret: false, default: null, normalize: normaliserTheme, validate: themeRefuse },
+  // Mise en page de la page du salon (19/10/2026) : utile quand un site l'intègre sous son propre en-tête.
+  "en_ligne.entete": { roles: ["manager"], secret: false, default: true, validate: yesNo },
+  "en_ligne.largeur": { roles: ["manager"], secret: false, default: "colonne", validate: (v) => ((LARGEURS as readonly unknown[]).includes(v) ? null : coded("reglage.en_ligne_largeur")) },
   "en_ligne.salon": { roles: ["admin"], read: ["manager"], secret: false, default: "", validate: (v) => (typeof v === "string" && (v === "" || MOTIF_SALON.test(v)) ? null : coded("reglage.en_ligne_salon")) },
   "en_ligne.cle": { roles: ["admin"], secret: true, default: null, validate: (v) => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? null : coded("reglage.en_ligne_cle")) },
+  // Mise à jour par le réseau (spec du 21/10/2026, M-13) : « manuel » ou « automatique » (la nuit), à l'administrateur ;
+  // écrit seulement par PUT /api/mise-a-jour/mode, qui le recopie dans le fichier lu par le service root.
+  "mise_a_jour.mode": { roles: ["admin"], secret: false, default: "manuel", validate: (v) => (v === "manuel" || v === "automatique" ? null : coded("reglage.mise_a_jour_mode")), dedicated: "mise_a_jour.route" },
   ...WHATSAPP_TEXTS,
   // Caisse (sous-projet 5 § 5.2) : lus par la vente dès la vague 1, rubrique « Caisse » des Réglages en vague 2.
   "institut.niu": { roles: ["manager"], secret: false, default: "", validate: text(40) },
@@ -266,7 +272,7 @@ export function mountSettingsRoutes(app: OpenAPIHono<any>): void {
     const def = SETTING_DEFS[name];
     if (!def) return c.json({ error: msg(c, "reglage.inconnu") }, 404);
     if (!def.roles.includes(account.role)) return c.json({ error: msg(c, "acces.refuse") }, 403);
-    if (def.dedicated) return c.json({ error: msg(c, "devise.route") }, 409);
+    if (def.dedicated) return c.json({ error: msg(c, def.dedicated) }, 409);
     if (def.secret || account.role === "admin") {
       const refused = requireConfirmation(c);
       if (refused) return refused;

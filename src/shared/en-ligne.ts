@@ -8,6 +8,11 @@ export const POLICES = ["lama", "classique", "elegante", "moderne"] as const;
 export type Police = (typeof POLICES)[number];
 export type ThemeEnLigne = { fond: string; accent: string; police: Police };
 
+/** Mise en page de la page du salon (ajout du 19/10/2026) : en-tête (logo et nom) affiché ou non, colonne centrée ou toute la largeur. */
+export const LARGEURS = ["colonne", "pleine"] as const;
+export type AffichageEnLigne = { entete: boolean; largeur: (typeof LARGEURS)[number] };
+export const AFFICHAGE_DEFAUT: AffichageEnLigne = { entete: true, largeur: "colonne" };
+
 export const COULEUR = /^#[0-9A-Fa-f]{6}$/;
 export const CONTRASTE_TEXTE = 4.5;
 export const CONTRASTE_ACCENT = 3;

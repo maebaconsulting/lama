@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { join, resolve } from "node:path";
@@ -38,6 +38,12 @@ import { ADMIN_DEMO } from "./formation/demo.ts";
 import { definirDemoPublique, definirFormation, garderContreVraieBase } from "./formation/mode.ts";
 import { appliquerRemiseAZero } from "./formation/remise-a-zero.ts";
 import { programmerRemiseNocturne, remettreCetteNuit } from "./formation/remise-nocturne.ts";
+import { sauvegardeManuelleEnCours } from "./backup/routes.ts";
+import { depotConfigure, sourceDesVersions, startConsultationQuotidienne } from "./mise-a-jour/consultation.ts";
+import type { MiseAJourEnv } from "./mise-a-jour/routes.ts";
+import { startSurveillanceMiseAJour } from "./mise-a-jour/surveillance.ts";
+import { sauvegardeSystemeEnCours, serviceMiseAJourActif } from "./mise-a-jour/systeme.ts";
+import { lireVersionInstallee } from "./mise-a-jour/version.ts";
 import { ensureSeeded } from "./seed.ts";
 import { langFromEnv, message } from "./messages.ts";
 
@@ -193,6 +199,15 @@ async function listening(server: Server | HttpsServer, asked: number): Promise<n
   return typeof address === "object" && address ? address.port : asked;
 }
 
+/** Contenu de /etc/lama/mise-a-jour.conf (recette de la mise à jour par le réseau), null s'il manque. */
+function lireConfReseau(configDir: string): string | null {
+  try {
+    return readFileSync(join(configDir, "mise-a-jour.conf"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export async function start(demande: Config = readConfig()): Promise<Running> {
   // Démonstration publique (DP-01) : toujours une base de formation, même si l'appelant ne l'a pas dit. Tout ce qui suit
   // (garde contre la vraie base, file d'envoi, horloge, clés de sauvegarde, remise à zéro) lit `config.formation`.
@@ -297,6 +312,29 @@ export async function start(demande: Config = readConfig()): Promise<Running> {
       }
     }, 500),
   };
+  // Mise à jour par le réseau (spec du 21/10/2026) : jamais dans la base de formation, qui suit la version du
+  // service principal (M-16). Version lue dans le dossier de travail (/opt/lama/actuelle, M-2) ; dépôt de recette
+  // lu dans /etc/lama/mise-a-jour.conf, comme le service root. Consultation automatique hors développement
+  // (sauf faux serveur des versions, LAMA_MISE_A_JOUR_SOURCE) : ni les essais ni le poste ne sortent seuls.
+  let stopMiseAJour = (): void => undefined;
+  if (!config.formation) {
+    const miseAJour: MiseAJourEnv = {
+      dossier: join(config.dataDir, "mise-a-jour"),
+      dataDir: config.dataDir,
+      installee: lireVersionInstallee(realpathSync(process.cwd())),
+      source: sourceDesVersions(process.env, config.dev, depotConfigure(lireConfReseau(config.configDir))),
+      sauvegardeEnCours: async () => sauvegardeManuelleEnCours() || (await sauvegardeSystemeEnCours()),
+      serviceActif: serviceMiseAJourActif,
+    };
+    env.MISE_A_JOUR = miseAJour;
+    console.log(`lama, version ${miseAJour.installee.numero}${miseAJour.installee.developpement ? " (développement)" : ""}`);
+    const arrets = [startSurveillanceMiseAJour({ dossier: miseAJour.dossier, installee: miseAJour.installee, demarreLe: Date.now(), storage: env.STORAGE, maintenant: Date.now, signaler: () => publish({ resource: "settings" }) })];
+    if (!config.dev || process.env.LAMA_MISE_A_JOUR_SOURCE) {
+      arrets.push(startConsultationQuotidienne({ storage: env.STORAGE, source: miseAJour.source, maintenant: Date.now }));
+    }
+    stopMiseAJour = () => { for (const arreter of arrets) arreter(); };
+  }
+
   // Base de formation (D-17) : la file n'est jamais expédiée ; rappels, relances et campagnes y restent, visibles dans « File d'envoi ».
   const stopOutbox = config.formation ? () => undefined : startWorker({ onChange: () => publish({ resource: "outbox" }) });
   const stopReminders = startReminders({ storage: env.STORAGE, onChange: () => publish({ resource: "outbox" }) });
@@ -323,6 +361,7 @@ export async function start(demande: Config = readConfig()): Promise<Running> {
     stopReminders();
     stopRelances();
     stopEnLigne();
+    stopMiseAJour();
     nuit?.arreter();
     reloader?.arreter();
   };

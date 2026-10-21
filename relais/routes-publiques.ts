@@ -87,7 +87,7 @@ export function routesPubliques(s: Services): Hono<Env> {
       institut: offre
         ? {
           nom: offre.institut.nom, telephone: offre.institut.telephone, logo: offre.institut.logo, devise: offre.institut.devise, langues: offre.institut.langues,
-          texte_donnees: offre.institut.texte_donnees, theme: offre.institut.theme ?? null, horaires: offre.institut.horaires ?? null,
+          texte_donnees: offre.institut.texte_donnees, theme: offre.institut.theme ?? null, affichage: offre.institut.affichage ?? null, horaires: offre.institut.horaires ?? null,
         }
         : null,
       prestations: ctx.offre?.prestations ?? [],

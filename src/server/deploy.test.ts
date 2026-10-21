@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { englishFaults, frenchFaults } from "../client/i18n/typography.ts";
+import { opensslEssai, paireEssai, preparerVersionEssai, SANS_OPENSSL } from "./deploy-essais.ts";
 
 // Les attentes historiques de ce fichier sont en français : les scripts
 // essayés ici (processus enfants) le parlent quelle que soit la langue du Mac
@@ -206,7 +207,10 @@ test("installation : refuse de s'installer depuis le dossier qu'elle va supprime
   const s = read("installer.sh");
   assert.match(s, /pwd -P/, "la source doit être résolue sans lien symbolique");
   assert.match(s, /"\$SOURCE" != "\$APP\/versions\/\$VERSION"/);
-  assert.match(s, /\[\[ "\$VERSION" =~ \^\[0-9\]\{8\}-\[0-9\]\{4\}-\[0-9a-f\]\+\$ \]\]/, "VERSION doit être validée avant tout rm -rf");
+  // Les deux formes (spec du 21/10/2026, M-1) : X.Y.Z publiée, AAAAMMJJ-HHMM-empreinte de développement.
+  const validation = s.indexOf('version_valide "$VERSION" || echec');
+  assert.ok(validation > 0 && validation < s.search(/^[ \t]*rm -rf /m), "VERSION doit être validée avant tout rm -rf");
+  assert.match(s, /source "\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/verification\.sh"/);
 });
 
 test("installation : Node 24 vérifié sur le binaire /usr/bin/node utilisé par l'unité systemd", () => {
@@ -339,8 +343,7 @@ test("jeton Google : texte invalide refusé avec un message, rien sur la sortie"
 test("mise à jour : refuse de s'installer depuis le dossier qu'elle va supprimer (version en service ou $APP/actuelle), VERSION validée", () => {
   const s = read("mettre-a-jour.sh");
   assert.match(s, /pwd -P/, "la source doit être résolue sans lien symbolique");
-  assert.match(s, /\[\[ "\$VERSION" =~ \^\[0-9\]\{8\}-\[0-9\]\{4\}-\[0-9a-f\]\+\$ \]\]/, "VERSION doit être validée avant tout rm -rf");
-  const validation = s.indexOf('=~ ^[0-9]{8}-[0-9]{4}-[0-9a-f]+$');
+  const validation = s.indexOf('version_valide "$VERSION" || echec');
   // Vise la commande en début de ligne, avec ou sans indentation (M4, relecture
   // de la tâche 13 ; le corps du script est indenté depuis la Correction 2,
   // garde-fou BASH_SOURCE), pas une occurrence de « rm -rf » dans un commentaire
@@ -408,11 +411,9 @@ test("copie_avant_migration : garde la plus ancienne copie postérieure au témo
   assert.equal(essaiCopieAvantMigration(dir, temoin), plusAncienne);
 });
 
-test("mise à jour : nettoyage trié par nom, version en service et précédente jamais supprimées, version refusée nettoyée au retour arrière", () => {
+test("mise à jour : nettoyage par versions_a_supprimer, version refusée nettoyée au retour arrière", () => {
   const s = read("mettre-a-jour.sh");
-  assert.match(s, /ls -1d \*\/ 2>\/dev\/null \| sed 's#\/\$##' \| sort -r/);
-  assert.match(s, /\[ "\$NOM" = "\$VERSION" \] && continue/);
-  assert.match(s, /\[ "\$NOM" = "\$\(basename "\$PRECEDENTE"\)" \] && continue/);
+  assert.match(s, /done < <\(versions_a_supprimer "\$APP\/versions" "\$GARDER" "\$VERSION" "\$\(basename "\$PRECEDENTE"\)"\)/);
   const retourArriere = s.indexOf("Retour à la version précédente");
   const rmVersionRefusee = s.indexOf('rm -rf "$APP/versions/$VERSION"', retourArriere);
   assert.ok(retourArriere > 0 && rmVersionRefusee > retourArriere, "la version refusée doit être supprimée au retour arrière");
@@ -1239,4 +1240,119 @@ test("installation : WhatsApp, veille, disque neuf, formation et Google Drive pa
   assert.match(s, /if \[ "\$MODE" = "assiste" \] && ! blkid -L LAMA-SAUVEGARDE/);
   assert.match(s, /grep -xF -- "\$\{NOM_DISQUE#\/dev\/\}" >\/dev\/null; then\n\s+"\$APP\/actuelle\/deploy\/preparer-disque\.sh"/, "seul un disque USB de la liste est proposé à l'effacement");
   assert.doesNotMatch(s, /\b(mkfs|wipefs|sgdisk)\b|\bparted\s+(-\w+\s+)*["$/]/, "installer.sh n'efface jamais un disque lui-même");
+});
+
+// ── Mise à jour par le réseau (spec du 21/10/2026), vague 1 ──
+
+/** Version que fabriquer-paquet.sh écrirait pour la racine donnée (fonction version_a_fabriquer seule). */
+function versionAFabriquer(racine: string, publiee: "0" | "1"): { code: number; version: string } {
+  const r = spawnSync("bash", ["-c", `source '${join(DEPLOY, "fabriquer-paquet.sh")}'; version_a_fabriquer "$1" "$2"`, "essai", racine, publiee], { encoding: "utf8", env: envWith({ LAMA_LANGUE: "fr" }) });
+  return { code: r.status ?? -1, version: r.stdout };
+}
+
+test("paquet : version publiée prise dans package.json (--publiee), sinon AAAAMMJJ-HHMM-empreinte (M-1)", () => {
+  const racine = mkdtempSync(join(tmpdir(), "lama-paquet-"));
+  writeFileSync(join(racine, "package.json"), JSON.stringify({ name: "lama", version: "1.4.2" }));
+  execFileSync("git", ["-C", racine, "init", "--quiet"]);
+  execFileSync("git", ["-C", racine, "-c", "user.name=Essai", "-c", "user.email=essai@exemple.cm", "-c", "commit.gpgsign=false", "add", "package.json"]);
+  execFileSync("git", ["-C", racine, "-c", "user.name=Essai", "-c", "user.email=essai@exemple.cm", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "essai"]);
+  assert.deepEqual(versionAFabriquer(racine, "1"), { code: 0, version: "1.4.2" });
+  assert.match(versionAFabriquer(racine, "0").version, /^\d{8}-\d{4}-[0-9a-f]+$/);
+  writeFileSync(join(racine, "package.json"), JSON.stringify({ name: "lama", version: "1.4.2-beta" }));
+  assert.notEqual(versionAFabriquer(racine, "1").code, 0, "version de package.json hors de X.Y.Z");
+  const s = read("fabriquer-paquet.sh");
+  assert.match(s, /--publiee\) PUBLIEE=1 ;;/);
+  assert.match(s, /VERSION="\$\(version_a_fabriquer "\$RACINE" "\$PUBLIEE"\)"/);
+});
+
+/** Lance une fonction de mettre-a-jour.sh chargé par « source » ; sortie d'erreur rendue. */
+function majFonction(appel: string, args: string[], vars: Record<string, string> = {}): { code: number; sortie: string; erreur: string } {
+  const r = spawnSync("bash", ["-c", `source '${join(DEPLOY, "mettre-a-jour.sh")}'; ${appel} "$@"`, "essai", ...args], { encoding: "utf8", env: envWith({ LAMA_LANGUE: "fr", ...vars }) });
+  return { code: r.status ?? -1, sortie: r.stdout, erreur: r.stderr };
+}
+
+test("nettoyage : trié par date d'installation, jamais par nom ; version installée et précédente gardées (Review Focus 3)", () => {
+  const dossier = mkdtempSync(join(tmpdir(), "lama-versions-"));
+  const maintenant = Date.now();
+  // Du plus ancien au plus récent installé ; un tri par nom placerait 20261021-… en tête et supprimerait 1.10.0.
+  ["1.0.0", "1.9.3", "20261021-1030-abc", "1.10.0", "1.11.0"].forEach((nom, i) => {
+    mkdirSync(join(dossier, nom));
+    const quand = new Date(maintenant - (5 - i) * 60_000);
+    utimesSync(join(dossier, nom), quand, quand);
+  });
+  const r = majFonction("versions_a_supprimer", [dossier, "3", "1.11.0", "1.0.0"]);
+  assert.equal(r.code, 0, r.erreur);
+  assert.deepEqual(r.sortie.split("\n").filter(Boolean), ["1.9.3"]);
+});
+
+test("mise à jour : étapes annoncées au service root seulement s'il les demande (M-10)", () => {
+  assert.equal(majFonction("marque", ["sauvegarde"]).sortie, "");
+  assert.equal(majFonction("marque", ["sauvegarde"], { LAMA_MARQUES_ETAPES: "1" }).sortie, "@etape sauvegarde\n");
+  const s = read("mettre-a-jour.sh");
+  const ordre = ["marque sauvegarde", "systemctl start lama-sauvegarde.service", "marque installation", 'cp -R "$SOURCE"', "marque controle", "systemctl restart lama.service"];
+  let avant = -1;
+  for (const pas of ordre) {
+    const i = s.indexOf(pas);
+    assert.ok(i > avant, `ordre : ${pas}`);
+    avant = i;
+  }
+});
+
+test("mise à jour : codes de sortie par motif, lus par le service root (M-10)", () => {
+  const s = read("mettre-a-jour.sh");
+  assert.match(s, /^SORTIE_SAUVEGARDE=3$/m);
+  assert.match(s, /^SORTIE_DEMARRAGE=4$/m);
+  assert.match(s, /^SORTIE_VERIFICATION=5$/m);
+  assert.match(s, /echec_code "\$SORTIE_SAUVEGARDE" "\$\(msg "La sauvegarde a échoué\./);
+  assert.match(s, /echec_code "\$SORTIE_DEMARRAGE" "\$\(msg "Mise à jour annulée, la version précédente est de nouveau en service/);
+  assert.match(s, /controle_signature "\$SOURCE" "\$VERSION" "\$APP\/actuelle\/deploy\/cle-publique\.pem" "\$SANS_SIGNATURE" \|\| exit "\$SORTIE_VERIFICATION"/);
+  assert.ok(s.indexOf("controle_signature \"$SOURCE\"") < s.indexOf("marque sauvegarde"), "vérification avant tout geste");
+});
+
+test("mise à jour : une seule à la fois ; le service root qui tient déjà le verrou n'attend pas (M-9)", () => {
+  const s = read("mettre-a-jour.sh");
+  assert.match(s, /^VERROU=\/run\/lama-mise-a-jour\.verrou$/m);
+  assert.match(s, /if \[ "\$\{LAMA_VERROU_TENU:-0\}" != 1 \]; then\n(?:    #.*\n)*    \( umask 077 && : >> "\$VERROU" \)\n    chmod 0600 "\$VERROU"\n    exec 9>"\$VERROU"\n    flock -n 9 \|\| echec/);
+  assert.ok(s.indexOf("flock -n 9") < s.indexOf("marque sauvegarde"));
+});
+
+test("vérification à la main : X.Y.Z sans signature refusée, développement averti, --sans-signature averti (M-6)", () => {
+  const sans = preparerVersionEssai({ version: "1.2.0" });
+  execFileSync("tar", ["-xzf", join(sans.dossier, "lama-1.2.0.tar.gz"), "-C", sans.dossier]);
+  rmSync(join(sans.dossier, "SHA256SUMS"));
+  const source = join(sans.dossier, "lama-1.2.0");
+  const refus = majFonction("controle_signature", [source, "1.2.0", join(sans.dossier, "absente.pem"), "0"]);
+  assert.equal(refus.code, 1);
+  assert.match(refus.erreur, /Version 1\.2\.0 sans signature, refusée\u00a0: /);
+  const dev = majFonction("controle_signature", [source, "20261021-1030-abc", join(sans.dossier, "absente.pem"), "0"]);
+  assert.equal(dev.code, 0);
+  assert.match(dev.erreur, /Paquet de développement sans signature/);
+  const essai = majFonction("controle_signature", [source, "1.2.0", join(sans.dossier, "absente.pem"), "1"]);
+  assert.equal(essai.code, 0);
+  assert.match(essai.erreur, /--sans-signature\u00a0: archive installée sans vérification, réservé aux essais\./);
+});
+
+test("vérification à la main : clé en service, autre clé, dossier modifié, version en service sans clé (M-5, M-6)", (t) => {
+  const openssl = opensslEssai();
+  if (!openssl) { t.skip(SANS_OPENSSL); return; }
+  const cle = paireEssai(openssl);
+  const autre = paireEssai(openssl);
+  const vars = { LAMA_OPENSSL: openssl };
+  const extraire = (o: Parameters<typeof preparerVersionEssai>[0]) => {
+    const { dossier } = preparerVersionEssai(o);
+    execFileSync("tar", ["-xzf", join(dossier, `lama-${o.version}.tar.gz`), "-C", dossier]);
+    return join(dossier, `lama-${o.version}`);
+  };
+  const bonne = extraire({ version: "1.2.0", openssl, privee: cle.privee });
+  assert.equal(majFonction("controle_signature", [bonne, "1.2.0", cle.publique, "0"], vars).code, 0);
+  const refus = majFonction("controle_signature", [bonne, "1.2.0", autre.publique, "0"], vars);
+  assert.equal(refus.code, 1);
+  assert.match(refus.erreur, /^Signature refusée\u00a0: /m);
+  writeFileSync(join(bonne, "deploy", "mettre-a-jour.sh"), "#!/usr/bin/env bash\necho falsifié\n");
+  assert.match(majFonction("controle_signature", [bonne, "1.2.0", cle.publique, "0"], vars).erreur, /Le dossier extrait ne correspond pas à l'archive signée/);
+  // Serveur installé avant les versions signées : la clé de l'archive, avec un avertissement.
+  const ancienne = extraire({ version: "1.3.0", openssl, privee: cle.privee, clePublique: cle.publique });
+  const sansCle = majFonction("controle_signature", [ancienne, "1.3.0", join(ancienne, "absente.pem"), "0"], vars);
+  assert.equal(sansCle.code, 0, sansCle.erreur);
+  assert.match(sansCle.erreur, /La version en service n'a pas de clé publique/);
 });

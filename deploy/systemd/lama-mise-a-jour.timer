@@ -1,0 +1,10 @@
+[Unit]
+Description=lama, recherche d'une nouvelle version chaque nuit à 3 h 30 (heure de Douala), en mode automatique
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Africa/Douala
+Persistent=false
+Unit=lama-mise-a-jour.service
+
+[Install]
+WantedBy=timers.target

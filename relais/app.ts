@@ -2,7 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import type { Offre } from "./noyau/contrat.ts";
 import { SALONS_RESERVES } from "./noyau/salon.ts";
-import { pageAvecTheme } from "./noyau/theme.ts";
+import { pageAvecAffichage, pageAvecTheme } from "./noyau/theme.ts";
 import { routesLama } from "./routes-lama.ts";
 import { routesPubliques } from "./routes-publiques.ts";
 import { routesGestion } from "./routes-gestion.ts";
@@ -42,9 +42,9 @@ export function creerApp(deps: Dependances): OpenAPIHono {
     if (SALONS_RESERVES.includes(id)) return c.json(erreur("introuvable", "adresse inconnue"), 404);
     const salon = await s.salons.lire(id);
     if (!salon) return servir(c, "index.html", 404);
-    // Thème du salon posé dans la page par le serveur (spec § 9.5) : aucune page ne change de couleurs après coup.
+    // Thème et mise en page du salon posés dans la page par le serveur (spec § 9.5) : aucune page ne change de couleurs ni de forme après coup.
     const offre = await duSalon(s, salon).depot.lireDocument<Offre>("offre");
-    return servir(c, "index.html", 200, (html) => pageAvecTheme(html, offre?.institut.theme));
+    return servir(c, "index.html", 200, (html) => pageAvecAffichage(pageAvecTheme(html, offre?.institut.theme), offre?.institut.affichage));
   });
   app.notFound((c) => c.json(erreur("introuvable", "adresse inconnue"), 404));
   app.onError((e, c) => {

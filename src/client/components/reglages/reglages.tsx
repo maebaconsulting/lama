@@ -13,6 +13,7 @@ import { Connexions } from "./connexions";
 import { FileEnvoi } from "./file-envoi";
 import { Fidelite } from "./fidelite";
 import { Heure } from "./heure";
+import { MiseAJourReseau } from "./mise-a-jour-reseau";
 import { Formation } from "./formation";
 import { useFormation } from "../../formation-context";
 import { Institut } from "./institut";
@@ -39,6 +40,7 @@ export const RUBRIQUES: Record<SectionId, FunctionComponent> = {
   "file-envoi": FileEnvoi,
   sauvegardes: Sauvegardes,
   heure: Heure,
+  "mise-a-jour": MiseAJourReseau,
   formation: Formation,
   connexions: Connexions,
   journal: Journal,

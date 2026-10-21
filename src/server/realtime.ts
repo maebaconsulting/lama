@@ -37,6 +37,8 @@ const RESOURCES: Record<string, string> = {
   // Sauvegarde lancée à la main : l'état des sauvegardes (bandeau des 36 h, rubrique Sauvegardes) suit « outbox ».
   backups: "outbox",
   devise: "settings",
+  // Mise à jour par le réseau : demande, vérification et mode relus par la rubrique et la pastille des Réglages.
+  "mise-a-jour": "settings",
 };
 
 export function resourceFor(path: string): string | null {

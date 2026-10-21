@@ -57,6 +57,12 @@ export const Theme = z.object({
   if (contraste(t.accent, t.fond) < CONTRASTE_ACCENT) ctx.addIssue({ code: "custom", message: "contraste de l'accent sur le fond inférieur à 3:1", path: ["accent"] });
 }).openapi("Theme");
 
+/** Mise en page de la page du salon (facultative, ajout du 19/10/2026) : sans elle, en-tête affiché et colonne centrée. */
+export const Affichage = z.object({
+  entete: z.boolean(),
+  largeur: z.enum(["colonne", "pleine"]),
+}).openapi("Affichage");
+
 const PlagesDuJour = z.array(Plage).max(2);
 /** Horaires d'ouverture (facultatifs, ajout du 18/10/2026) : zéro à deux plages par jour, fin exclusive. */
 export const Horaires = z.object({
@@ -74,6 +80,7 @@ export const Offre = z.object({
     langues: z.array(Langue).min(1),
     texte_donnees: Texte,
     theme: Theme.optional(),
+    affichage: Affichage.optional(),
     horaires: Horaires.optional(),
   }),
   prestations: z.array(Prestation).max(500),

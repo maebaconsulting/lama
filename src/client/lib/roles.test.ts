@@ -36,8 +36,8 @@ test("l'équipe garde l'activité et les Réglages", () => {
 
 test("rubriques des Réglages par rôle (spec § 4), « Mon compte » pour tous", () => {
   const ids = (role: Parameters<typeof sectionsFor>[0]) => sectionsFor(role).map((s) => s.id);
-  assert.deepEqual(ids("admin"), ["caisse", "en-ligne", "import", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "connexions", "journal", "mon-compte"]);
-  assert.deepEqual(ids("manager"), ["institut", "caisse", "fidelite", "whatsapp", "en-ligne", "import", "comptes", "postes", "a-envoyer", "file-envoi", "journal", "mon-compte"]);
+  assert.deepEqual(ids("admin"), ["caisse", "en-ligne", "import", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "mise-a-jour", "connexions", "journal", "mon-compte"]);
+  assert.deepEqual(ids("manager"), ["institut", "caisse", "fidelite", "whatsapp", "en-ligne", "import", "comptes", "postes", "a-envoyer", "file-envoi", "mise-a-jour", "journal", "mon-compte"]);
   assert.deepEqual(ids("reception"), ["a-envoyer", "file-envoi", "mon-compte"]);
   assert.deepEqual(ids("practitioner"), ["mon-compte"]);
 });

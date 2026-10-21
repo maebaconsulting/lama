@@ -2,6 +2,7 @@ import { AppNav } from "@clawnify/app/client";
 import { Banknote, CalendarDays, Clock, Home, Package, Settings, Sparkles, Sun, UserCog, Users } from "lucide-preact";
 import { api } from "../../api";
 import { useAEnvoyer } from "../../hooks/use-a-envoyer";
+import { useMiseAJourDisponible } from "../../hooks/use-mise-a-jour-disponible";
 import { useApp } from "../../context";
 import { useAuth } from "../../auth-context";
 import { useI18n } from "@/i18n/provider";
@@ -54,6 +55,14 @@ export function CompteurAEnvoyer() {
       {count}
     </span>
   );
+}
+
+/** Nouvelle version de lama sur les Réglages, pour l'administrateur en mode manuel (spec du 21/10/2026, M-15) : petit aplat rouge, sans chiffre. */
+export function PastilleMiseAJour() {
+  const visible = useMiseAJourDisponible();
+  const { t } = useI18n();
+  if (!visible) return null;
+  return <span role="img" aria-label={t("mise_a_jour.pastille")} className="absolute -right-1.5 -top-1.5 inline-flex h-2.5 w-2.5 rounded-sm border border-destructive bg-destructive" />;
 }
 
 /** Navigation fournie par l'hôte quand l'app est intégrée (mode agent de Clawnify), inchangée. */

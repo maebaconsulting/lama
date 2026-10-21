@@ -104,6 +104,16 @@ export function styleTheme(t: Theme): string {
  * s'affiche d'abord dans la charte de lama). Sans thème, la page telle quelle. Les couleurs sont déjà validées
  * (`#RRGGBB`) et la police est un nom de la liste : rien d'autre n'entre dans la page.
  */
+/**
+ * Mise en page du salon posée sur <html> par le serveur (ajout du 19/10/2026), comme le thème : `data-entete="non"` masque
+ * le logo et le nom (la page intégrée sous l'en-tête d'un site les répéterait), `data-largeur="pleine"` lève la colonne centrée.
+ */
+export function pageAvecAffichage(html: string, a: { entete: boolean; largeur: "colonne" | "pleine" } | null | undefined): string {
+  if (!a) return html;
+  const attributs = `${a.entete ? "" : ' data-entete="non"'}${a.largeur === "pleine" ? ' data-largeur="pleine"' : ""}`;
+  return attributs ? html.replace(/<html\b([^>]*)>/, `<html$1${attributs}>`) : html;
+}
+
 export function pageAvecTheme(html: string, t: Theme | null | undefined): string {
   if (!t) return html;
   return html

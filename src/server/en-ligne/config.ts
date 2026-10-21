@@ -1,6 +1,6 @@
 import { getSetting } from "../settings.ts";
 import { SEMAINE_DEFAUT, type Semaine } from "../../shared/horaires.ts";
-import { adresseSansBarre, type ThemeEnLigne } from "../../shared/en-ligne.ts";
+import { adresseSansBarre, type AffichageEnLigne, type ThemeEnLigne } from "../../shared/en-ligne.ts";
 
 /** Fuseau publié avec l'offre : lama compte toutes ses heures à Douala (UTC+1 toute l'année). */
 export const FUSEAU = "Africa/Douala";
@@ -15,6 +15,7 @@ export type ConfigEnLigne = {
   horizonJours: number;
   delaiHeures: number;
   theme: ThemeEnLigne | null;
+  affichage: AffichageEnLigne;
   texteDonnees: { fr: string; en: string };
   institut: { nom: string; telephone: string; indicatif: string; horaires: Semaine };
 };
@@ -34,6 +35,7 @@ export async function lireConfig(): Promise<ConfigEnLigne> {
     horizonJours: await getSetting<number>("en_ligne.horizon_jours"),
     delaiHeures: await getSetting<number>("en_ligne.delai_minimal_heures"),
     theme: await getSetting<ThemeEnLigne | null>("en_ligne.theme"),
+    affichage: { entete: (await getSetting<boolean>("en_ligne.entete")) !== false, largeur: (await getSetting<string>("en_ligne.largeur")) === "pleine" ? "pleine" : "colonne" },
     texteDonnees: { fr: await getSetting<string>("en_ligne.texte_donnees.fr"), en: await getSetting<string>("en_ligne.texte_donnees.en") },
     institut: {
       nom: (await getSetting<string>("institut.nom")).trim(),

@@ -134,3 +134,14 @@ test("logo de l'offre : variante choisie selon le thème, repli, mémoire invali
   await deleteLogo("sombre");
   assert.equal(await logoPourOffre(null), null, "logos retirés");
 });
+
+test("offre : mise en page publiée seulement si elle change quelque chose (19/10/2026), et acceptée par le contrat", () => {
+  assert.equal("affichage" in construireOffre(baseEssai(), CONFIG_ESSAI, null).institut, false, "par défaut : offre inchangée");
+  const affichage = { entete: false, largeur: "pleine" as const };
+  const o = construireOffre(baseEssai(), { ...CONFIG_ESSAI, affichage }, null);
+  assert.deepEqual(o.institut.affichage, affichage);
+  const r = Offre.safeParse({ version: 1, ...o });
+  assert.ok(r.success, JSON.stringify(r.error?.issues));
+  assert.deepEqual(r.data.institut.affichage, affichage);
+  assert.deepEqual(construireOffre(baseEssai(), { ...CONFIG_ESSAI, affichage: { entete: true, largeur: "pleine" } }, null).institut.affichage, { entete: true, largeur: "pleine" });
+});

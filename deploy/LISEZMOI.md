@@ -161,8 +161,22 @@ La remise à zéro se fait aussi dans l'application : compte `formation.admin`,
 
 ## Mettre à jour
 
-1. Sur le poste de développement : `pnpm paquet`, puis copier l'archive sur le serveur.
-2. Sur le serveur :
+### Depuis l'application
+
+Une fois le mécanisme posé (installation, ou première mise à jour faite à la main ci-dessous sur un serveur installé avant), l'administrateur met lama à jour sans terminal : Réglages, « Mise à jour », « Vérifier maintenant », puis « Mettre à jour vers X.Y.Z » (case à cocher, mot de passe redemandé). Le mode « Automatique la nuit (3 h 30) » fait la même chose chaque nuit, sans personne.
+
+Seules les versions publiées et signées par l'éditeur de lama sont proposées. Le service `lama-mise-a-jour` (root, lancé par l'application ou par la minuterie de nuit) télécharge la version depuis GitHub, vérifie sa signature avec la clé de la version en service puis ses empreintes, et lance `mettre-a-jour.sh` de la nouvelle version : sauvegarde, installation, redémarrage, contrôle et retour arrière, comme à la main. Pendant le redémarrage, tous les écrans affichent « Maintenance en cours ». La rubrique dit l'étape en cours, puis le résultat et, en cas d'échec, son motif. Le service s'arrête de lui-même au bout de 4 h au plus.
+
+Journal du service : `journalctl -u lama-mise-a-jour -n 100`. État de la dernière opération : `/var/lib/lama/mise-a-jour/etat.json`.
+
+Recette sur un dépôt d'essai seulement : le fichier de root `/etc/lama/mise-a-jour.conf`, absent en temps normal, désigne un autre dépôt GitHub par une ligne `DEPOT=propriétaire/nom` ; l'application et le service le lisent tous deux.
+
+### À la main
+
+Pour la première mise à jour d'un serveur installé avant la mise à jour par l'application (elle pose le mécanisme), pour un serveur sans internet, ou pour un paquet de développement.
+
+1. Copier dans un même dossier du serveur les quatre fichiers de la version, pris sur la page des versions de lama sur GitHub : `lama-X.Y.Z.tar.gz`, `NOTES.md`, `SHA256SUMS` et `SHA256SUMS.sig`. Paquet de développement : `pnpm paquet` sur le poste de développement, puis copier l'archive.
+2. Sur le serveur, dans ce dossier :
 
 Lancer la mise à jour dans `tmux` (ou `screen`) : si la session SSH est coupée en cours de route, le script continue et l'on retrouve son affichage avec `tmux attach`. Installer `tmux` une fois pour toutes avec `sudo apt-get install -y tmux` s'il manque.
 
@@ -173,9 +187,11 @@ cd lama-NOUVELLE/
 sudo ./deploy/mettre-a-jour.sh
 ```
 
-Le script sauvegarde d'abord. Si cette sauvegarde échoue seulement à cause du disque USB (absent ou en échec), la mise à jour continue quand même, la copie Google Drive restant en file. Si elle échoue pour toute autre raison, la mise à jour est annulée : rien n'est modifié.
+Le script vérifie d'abord l'archive : signature de `SHA256SUMS` par la clé de la version en service, empreintes de l'archive et de la note, puis dossier extrait identique à l'archive (tout lien symbolique dans ce dossier est refusé). Une version X.Y.Z sans ces fichiers est refusée ; un paquet de développement passe avec un avertissement. Un serveur installé avant les versions signées n'a pas encore de clé : lancé à la main, le script prend celle de l'archive et le dit par un avertissement (cela détecte une archive abîmée, pas une archive falsifiée ; comparer son empreinte avec celle de la page des versions n'écarte que l'archive abîmée, puisqu'elle vient de la même source ; pour écarter une archive falsifiée, obtenir l'empreinte de l'archive auprès de l'éditeur par un autre canal, téléphone ou message, et la comparer avec le résultat de `sha256sum lama-X.Y.Z.tar.gz`) ; le service de l'application, lui, refuse toujours dans ce cas, d'où cette première mise à jour à la main. L'option `--sans-signature` est réservée aux essais. Une seule mise à jour à la fois : si une autre est en cours (depuis l'application ou un autre terminal), le script s'arrête et le dit.
 
-Il installe ensuite la nouvelle version à côté des anciennes, fabrique le certificat HTTPS s'il manque (ou le renouvelle au seuil), redémarre, puis vérifie que l'application répond. Sinon, il revient seul à la version précédente. Si la nouvelle version avait modifié la structure de la base, la copie d'avant la mise à jour est remise en place automatiquement à ce retour arrière ; la base modifiée par la nouvelle version est gardée à côté, sous le nom `lama.db.migree-AAAAMMJJ-HHMMSS` (avec ses fichiers `-wal` et `-shm` éventuels). Seules les versions récentes sont gardées dans `/opt/lama/versions` (les trois dernières, ainsi que la version en service et la précédente).
+Le script sauvegarde ensuite. Si cette sauvegarde échoue seulement à cause du disque USB (absent ou en échec), la mise à jour continue quand même, la copie Google Drive restant en file. Si elle échoue pour toute autre raison, la mise à jour est annulée : rien n'est modifié.
+
+Il installe ensuite la nouvelle version à côté des anciennes, fabrique le certificat HTTPS s'il manque (ou le renouvelle au seuil), redémarre, puis vérifie que l'application répond. Sinon, il revient seul à la version précédente. Si la nouvelle version avait modifié la structure de la base, la copie d'avant la mise à jour est remise en place automatiquement à ce retour arrière ; la base modifiée par la nouvelle version est gardée à côté, sous le nom `lama.db.migree-AAAAMMJJ-HHMMSS` (avec ses fichiers `-wal` et `-shm` éventuels). Seules les versions récentes sont gardées dans `/opt/lama/versions` (les trois dernières installées, ainsi que la version en service et la précédente). Il pose enfin la mise à jour depuis l'application, si elle manque.
 
 ### Première mise à jour vers HTTPS
 

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInstant } from "@/lib/format";
 import { CLES_GERANTE, peutEnregistrerTheme, problemeAffiche, rapport, THEME_DEPART, valeurReglage } from "@/lib/reglages-en-ligne";
-import { COULEUR, POLICES, texteSur, type Police, type ThemeEnLigne } from "../../../shared/en-ligne";
+import { COULEUR, LARGEURS, POLICES, texteSur, type Police, type ThemeEnLigne } from "../../../shared/en-ligne";
 import { useConfirmation } from "../auth/confirmation";
 import { Champ, Erreur, Succes } from "../champ";
 import { EtatChargement, EtatErreur } from "../comptoir";
@@ -26,7 +26,7 @@ type EtatLiaison = {
   offre_publiee_le: number | null; plages_publiees_le: number | null;
 };
 
-/** Interrupteur, horizon, délai minimal, adresse du relais, textes d'accord (gérante) : seuls les champs changés sont envoyés. */
+/** Interrupteur, horizon, délai minimal, adresse du relais, mise en page, textes d'accord (gérante) : seuls les champs changés sont envoyés. */
 function ReglagesGerante({ settings, recharger }: { settings: Setting[]; recharger: () => Promise<void> }) {
   const { t } = useI18n();
   const [baseline, setBaseline] = useState<Record<string, string> | null>(null);
@@ -71,6 +71,13 @@ function ReglagesGerante({ settings, recharger }: { settings: Setting[]; recharg
         <Champ id="en-ligne-horizon" type="number" min={7} max={92} label={t("en_ligne.horizon")} value={form["en_ligne.horizon_jours"]} onInput={set("en_ligne.horizon_jours")} />
         <Champ id="en-ligne-delai" type="number" min={0} max={168} label={t("en_ligne.delai")} value={form["en_ligne.delai_minimal_heures"]} onInput={set("en_ligne.delai_minimal_heures")} />
         <Champ id="en-ligne-adresse" type="url" label={t("en_ligne.adresse")} placeholder={t("en_ligne.adresse_exemple")} value={form["en_ligne.adresse"]} onInput={set("en_ligne.adresse")} />
+        <Case id="en-ligne-entete" label={t("en_ligne.entete")} hint={t("en_ligne.entete_aide")} checked={form["en_ligne.entete"] === "true"} onChange={(v) => setForm({ ...form, "en_ligne.entete": String(v) })} />
+        <div className="space-y-1.5">
+          <Label htmlFor="en-ligne-largeur">{t("en_ligne.largeur")}</Label>
+          <select id="en-ligne-largeur" className={SELECT} value={form["en_ligne.largeur"]} onChange={(e) => setForm({ ...form, "en_ligne.largeur": (e.currentTarget as HTMLSelectElement).value })}>
+            {LARGEURS.map((l) => <option key={l} value={l}>{t(`en_ligne.largeur_${l}` as Key)}</option>)}
+          </select>
+        </div>
         {(["fr", "en"] as const).map((l) => (
           <div key={l} className="space-y-1.5">
             <Label htmlFor={`en-ligne-texte-${l}`}>{t(`en_ligne.texte_donnees.${l}` as Key)}</Label>

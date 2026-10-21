@@ -51,7 +51,7 @@ export function baseEssai(): DatabaseSync {
 
 /** Réglages d'essai : réservation en ligne activée, liaison réglée, institut de Douala ouvert du lundi au samedi de 09:00 à 19:00. */
 export const CONFIG_ESSAI: ConfigEnLigne = {
-  active: true, adresse: "https://relais.exemple", salon: "eclat", cle: "c".repeat(64), horizonJours: 30, delaiHeures: 2, theme: null,
+  active: true, adresse: "https://relais.exemple", salon: "eclat", cle: "c".repeat(64), horizonJours: 30, delaiHeures: 2, theme: null, affichage: { entete: true, largeur: "colonne" },
   texteDonnees: TEXTE_DONNEES,
   institut: { nom: "Institut Éclat", telephone: "699 00 00 00", indicatif: "237", horaires: SEMAINE_DEFAUT },
 };

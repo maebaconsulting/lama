@@ -14,6 +14,7 @@ test("rubrique Formation : administrateur de la base de formation seulement, apr
   assert.ok(!ids("admin").includes("formation"), "vraie base : aucune rubrique Formation");
   assert.deepEqual(ids("admin", true), ["caisse", "en-ligne", "import", "comptes", "postes", "file-envoi", "sauvegardes", "heure", "formation", "connexions", "journal", "mon-compte"]);
   for (const role of ["manager", "reception", "practitioner"] as const) assert.ok(!ids(role, true).includes("formation"), role);
+  for (const role of ["admin", "manager"] as const) assert.ok(!ids(role, true).includes("mise-a-jour"), role);
   assert.equal(forbiddenSection("admin", "formation"), true);
   assert.equal(forbiddenSection("admin", "formation", true), false);
   assert.equal(forbiddenSection("manager", "formation", true), true);

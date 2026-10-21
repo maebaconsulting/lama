@@ -30,6 +30,11 @@ body { background: var(--fond); color: var(--texte); font-family: var(--font-san
 .page { max-width: 34rem; margin: 0 auto; padding: 16px 16px 48px; }
 .entete { display: flex; align-items: center; gap: 12px; padding: 8px 0 16px; border-bottom: 1px solid var(--filet); margin-bottom: 16px; }
 .entete > div { flex: 1; min-width: 0; }
+/* Mise en page choisie dans lama (data-entete, data-largeur sur <html>, posés par le serveur) : sans logo ni nom, il reste le bouton de langue. */
+html[data-entete="non"] .entete { justify-content: flex-end; padding: 0; border-bottom: 0; margin-bottom: 8px; }
+html[data-entete="non"] .entete .logo, html[data-entete="non"] .entete > div { display: none; }
+html[data-largeur="pleine"] .page { max-width: none; }
+html[data-largeur="pleine"] form, html[data-largeur="pleine"] .filtre { max-width: 40rem; }
 .logo { width: 48px; height: 48px; object-fit: contain; }
 .marque { font-family: var(--font-marque); font-weight: 300; font-size: 1.75rem; letter-spacing: 0.08em; line-height: 1.1; margin: 0; overflow-wrap: anywhere; }
 .sous-titre-entete { margin: 2px 0 0; color: var(--encre-grise); font-size: 0.875rem; }

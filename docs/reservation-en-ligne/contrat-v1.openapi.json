@@ -134,6 +134,25 @@
           "police"
         ]
       },
+      "Affichage": {
+        "type": "object",
+        "properties": {
+          "entete": {
+            "type": "boolean"
+          },
+          "largeur": {
+            "type": "string",
+            "enum": [
+              "colonne",
+              "pleine"
+            ]
+          }
+        },
+        "required": [
+          "entete",
+          "largeur"
+        ]
+      },
       "Horaires": {
         "type": "object",
         "properties": {
@@ -329,6 +348,9 @@
               },
               "theme": {
                 "$ref": "#/components/schemas/Theme"
+              },
+              "affichage": {
+                "$ref": "#/components/schemas/Affichage"
               },
               "horaires": {
                 "$ref": "#/components/schemas/Horaires"

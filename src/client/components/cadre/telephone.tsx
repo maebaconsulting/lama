@@ -13,7 +13,7 @@ import { LangSwitch } from "@/components/lang-switch";
 import { useInstaller } from "@/components/installer-lama";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { View } from "../../types";
-import { CompteurAEnvoyer, CompteurStockBas, navIcon, saveOwnLang } from "./navigation";
+import { CompteurAEnvoyer, CompteurStockBas, PastilleMiseAJour, navIcon, saveOwnLang } from "./navigation";
 
 /** En-tête cuir réduit du téléphone : la marque lama blanche, zones sûres comprises. */
 export function EnTeteTelephone() {
@@ -52,7 +52,7 @@ function Plus({ currentView, installer }: { currentView: View; installer: (() =>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button type="button" aria-current={active ? "page" : undefined} className={cn(TAB, active ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70")}>
-          <span className="relative flex"><MoreHorizontal className="h-5 w-5" aria-hidden="true" />{views.includes("reglages") && <CompteurAEnvoyer />}</span>
+          <span className="relative flex"><MoreHorizontal className="h-5 w-5" aria-hidden="true" />{views.includes("reglages") && <CompteurAEnvoyer />}{views.includes("reglages") && <PastilleMiseAJour />}</span>
           <span className="max-w-full truncate">{t("cadre.plus")}</span>
         </button>
       </DialogTrigger>
@@ -78,7 +78,7 @@ function Plus({ currentView, installer }: { currentView: View; installer: (() =>
                         currentView === view ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60",
                       )}
                     >
-                      <span className="relative flex"><Icon className="h-5 w-5" aria-hidden="true" />{view === "products" && <CompteurStockBas />}{view === "reglages" && <CompteurAEnvoyer />}</span>
+                      <span className="relative flex"><Icon className="h-5 w-5" aria-hidden="true" />{view === "products" && <CompteurStockBas />}{view === "reglages" && <CompteurAEnvoyer />}{view === "reglages" && <PastilleMiseAJour />}</span>
                       <span className="min-w-0 flex-1 truncate">{t(viewLabelKey(view, account.role))}</span>
                     </button>
                   </li>

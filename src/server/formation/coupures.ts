@@ -25,6 +25,9 @@ const COUPEES: { method: string; path: RegExp }[] = [
   { method: "POST", path: /^\/api\/sms\/test\/?$/ },
   // « Ouvrir WhatsApp » ou « Ouvrir les SMS » : la tablette enverrait elle-même le message à un numéro peut-être réel.
   { method: "POST", path: /^\/api\/whatsapp\/manual\/[^/]+\/open\/?$/ },
+  // Mise à jour par le réseau (M-16) : la formation suit la version du service principal, sans rubrique.
+  { method: "POST", path: /^\/api\/mise-a-jour(\/verifier)?\/?$/ },
+  { method: "PUT", path: /^\/api\/mise-a-jour\/mode\/?$/ },
 ];
 
 /** Vrai si la route est coupée en formation. */

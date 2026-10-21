@@ -1,0 +1,9 @@
+[Unit]
+Description=lama, demande de mise à jour déposée par l'application
+
+[Path]
+PathExists=/var/lib/lama/mise-a-jour/demande.json
+Unit=lama-mise-a-jour.service
+
+[Install]
+WantedBy=paths.target

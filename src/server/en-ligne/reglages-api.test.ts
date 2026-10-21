@@ -105,3 +105,14 @@ test("code d'intégration : une adresse avec identifiants ne casse jamais l'extr
   }
   assert.equal((await g("PUT", "/api/settings/en_ligne.adresse", { value: "https://u:p@relais.invalid" })).status, 400, "identifiants refusés dans l'adresse");
 });
+
+test("mise en page de la page du salon (19/10/2026) : en-tête affiché et colonne par défaut, réglée par la gérante, largeur inconnue refusée", async (t) => {
+  const ctx = await setupApp(t, { demo: false });
+  const g = await ctx.as("manager");
+  assert.deepEqual([(await reglage(g, "en_ligne.entete"))?.value, (await reglage(g, "en_ligne.largeur"))?.value], [true, "colonne"]);
+  assert.equal((await g("PUT", "/api/settings/en_ligne.entete", { value: false })).status, 200);
+  assert.equal((await g("PUT", "/api/settings/en_ligne.largeur", { value: "pleine" })).status, 200);
+  const refus = await g("PUT", "/api/settings/en_ligne.largeur", { value: "large" }, FR);
+  assert.deepEqual([refus.status, refus.body.error], [400, "Largeur de la page\u00a0: «\u00a0colonne\u00a0» ou «\u00a0pleine\u00a0»."]);
+  assert.deepEqual([(await reglage(g, "en_ligne.entete"))?.value, (await reglage(g, "en_ligne.largeur"))?.value], [false, "pleine"]);
+});

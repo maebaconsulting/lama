@@ -162,3 +162,15 @@ test("décision : issue facultative d'un rappel clos (ajout du 18/10/2026), abse
   assert.equal(Decision.safeParse({ decision: "traitee", issue: "oubliee" }).success, false);
   assert.ok(Decision.safeParse({ decision: "acceptee", champ_futur: true }).success, "champ inconnu ignoré");
 });
+
+test("offre : mise en page facultative (ajout du 19/10/2026) ; absente, elle reste absente ; valeur inconnue refusée", () => {
+  const sans = Offre.safeParse(offre());
+  assert.ok(sans.success);
+  assert.equal("affichage" in sans.data.institut, false);
+  const avec = Offre.safeParse(avecInstitut({ affichage: { entete: false, largeur: "pleine" } }));
+  assert.ok(avec.success, JSON.stringify(avec.error?.issues));
+  assert.deepEqual(avec.data.institut.affichage, { entete: false, largeur: "pleine" });
+  for (const affichage of [{ entete: "non", largeur: "pleine" }, { entete: true, largeur: "large" }, { entete: true }]) {
+    assert.equal(Offre.safeParse(avecInstitut({ affichage })).success, false, JSON.stringify(affichage));
+  }
+});

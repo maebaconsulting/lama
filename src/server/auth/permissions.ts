@@ -104,6 +104,11 @@ const RULES: Rule[] = [
   { methods: ["GET"], path: /^\/api\/relances\/seuil$/, roles: BUSINESS },
   // Heure du serveur et caisse bloquée si l'heure recule (distribution D-11, D-13) : bandeau de l'administrateur et de la gérante.
   { methods: ["GET"], path: /^\/api\/heure$/, roles: LEADS },
+  // Mise à jour par le réseau (spec du 21/10/2026, M-15) : versions lues par l'administrateur et la gérante ;
+  // vérification, demande et mode à l'administrateur seul (mot de passe retapé pour la demande et le mode).
+  { methods: ["GET"], path: /^\/api\/mise-a-jour$/, roles: LEADS },
+  { methods: ["POST"], path: /^\/api\/mise-a-jour(\/verifier)?$/, roles: ADMIN },
+  { methods: ["PUT"], path: /^\/api\/mise-a-jour\/mode$/, roles: ADMIN },
   // Correction de l'heure du serveur (distribution D-12) : administrateur seul, mot de passe retapé.
   { methods: ["POST"], path: /^\/api\/heure$/, roles: ADMIN },
   // Remise à zéro de la base de formation (distribution D-19) : administrateur de la formation, mot de passe retapé.

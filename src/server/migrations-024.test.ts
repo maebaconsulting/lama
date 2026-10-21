@@ -49,7 +49,7 @@ test("024 : base en service, lignes de facture reprises à l'identique ; vue, d�
     acompte: sqlDe(db, "deposits_deduit"),
     vue: sqlDe(db, "invoice_balance"),
   };
-  assert.deepEqual(runMigrations(db), ["024_supplements"]);
+  assert.deepEqual(runMigrations(db), ["024_supplements", "025_mise_a_jour"]);
   assert.deepEqual(lignes(db), avant.lignes);
   assert.deepEqual(db.prepare("SELECT * FROM invoice_balance ORDER BY invoice_id").all().map((r) => ({ ...r })), avant.solde);
   assert.equal(sqlDe(db, "deposits_deduit"), avant.acompte, "déclencheur des acomptes recréé à l'identique");

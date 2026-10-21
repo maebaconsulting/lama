@@ -5,12 +5,13 @@ import { contraste, problemeTheme, type Police, type ProblemeTheme, type ThemeEn
 /** Réglages de la gérante enregistrés par le premier formulaire. */
 export const CLES_GERANTE = [
   "en_ligne.active", "en_ligne.horizon_jours", "en_ligne.delai_minimal_heures", "en_ligne.adresse", "en_ligne.texte_donnees.fr", "en_ligne.texte_donnees.en",
+  "en_ligne.entete", "en_ligne.largeur",
 ] as const;
 const NOMBRES = new Set<string>(["en_ligne.horizon_jours", "en_ligne.delai_minimal_heures"]);
 
 /** Valeur d'un champ du formulaire, telle que le serveur l'attend. */
 export function valeurReglage(cle: string, texte: string): unknown {
-  if (cle === "en_ligne.active") return texte === "true";
+  if (cle === "en_ligne.active" || cle === "en_ligne.entete") return texte === "true";
   return NOMBRES.has(cle) ? Number(texte) : texte.trim();
 }
 

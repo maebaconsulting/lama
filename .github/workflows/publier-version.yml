@@ -1,0 +1,88 @@
+name: Publier une version
+
+# Étiquette annotée vX.Y.Z poussée sur le dépôt public (spec du 21/10/2026, M-3) : contrôle de
+# l'étiquette et de la note, essais, tsc au seuil, archive, SHA256SUMS signé, release GitHub.
+# Le moindre écart arrête le travail avant toute publication.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publier:
+    # Seuls les dépôts qui publient (variable de dépôt LAMA_PUBLICATION = oui : dépôt public,
+    # dépôt de recette) ; jamais une copie.
+    if: vars.LAMA_PUBLICATION == 'oui'
+    runs-on: ubuntu-24.04
+    # Droits du jeton limités à ce travail : écrire la release.
+    permissions:
+      contents: write
+    steps:
+      # à épingler par SHA avant la première publication (tâche 20)
+      - uses: actions/checkout@v4
+        with:
+          # Jeton jamais laissé dans .git/config pendant les essais et la fabrication. Le dépôt
+          # est public (le service root des instituts y télécharge sans compte) : le git fetch
+          # de l'étiquette plus bas le lit sans identifiants.
+          persist-credentials: false
+          fetch-depth: 0
+
+      # à épingler par SHA avant la première publication (tâche 20)
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
+      # à épingler par SHA avant la première publication (tâche 20)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Étiquette annotée et note
+        run: |
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" != tag ]; then
+            echo "Étiquette non annotée : sa note manque, rien n'est publié." >&2
+            exit 1
+          fi
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed '/^-----BEGIN PGP SIGNATURE-----$/,$d' > "$RUNNER_TEMP/note.md"
+          bash outils/publication/preparer-version.sh --verifier "$GITHUB_REF_NAME" "$RUNNER_TEMP/note.md"
+
+      - name: Installation
+        run: pnpm install --frozen-lockfile
+
+      - name: Essais
+        run: pnpm test
+
+      - name: tsc au seuil
+        run: |
+          # Code 0 : aucune erreur ; 2 : erreurs de type, comptées. Tout autre code (tsc absent,
+          # configuration illisible) : tsc n'a pas vérifié le code, rien n'est publié.
+          CODE=0
+          pnpm exec tsc --noEmit -p . > "$RUNNER_TEMP/tsc.txt" 2>&1 || CODE=$?
+          if [ "$CODE" -ne 0 ] && [ "$CODE" -ne 2 ]; then
+            cat "$RUNNER_TEMP/tsc.txt"
+            echo "tsc n'a pas tourné (code $CODE) : rien n'est publié." >&2
+            exit 1
+          fi
+          ERREURS="$(grep -c "error TS" "$RUNNER_TEMP/tsc.txt" || true)"
+          echo "tsc : $ERREURS erreurs (au plus 13)"
+          [ "$ERREURS" -le 13 ]
+
+      - name: Archive et signature
+        env:
+          LAMA_CLE_SIGNATURE: ${{ secrets.LAMA_CLE_SIGNATURE }}
+        run: |
+          umask 077
+          printf '%s\n' "$LAMA_CLE_SIGNATURE" > "$RUNNER_TEMP/cle.pem"
+          trap 'rm -f "$RUNNER_TEMP/cle.pem"' EXIT
+          bash outils/publication/preparer-version.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/note.md" "$RUNNER_TEMP/cle.pem" "$RUNNER_TEMP/version"
+          rm -f "$RUNNER_TEMP/cle.pem"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "lama $VERSION" --notes-file "$RUNNER_TEMP/version/NOTES.md" \
+            "$RUNNER_TEMP/version/lama-$VERSION.tar.gz" "$RUNNER_TEMP/version/NOTES.md" "$RUNNER_TEMP/version/SHA256SUMS" "$RUNNER_TEMP/version/SHA256SUMS.sig"
