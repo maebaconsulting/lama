@@ -70,10 +70,7 @@ test("travail «\u00a0Publier une version\u00a0» : étiquette vérifiée d'abor
   assert.match(w, /^    if: vars\.LAMA_PUBLICATION == 'oui'$/m);
   assert.doesNotMatch(w, /^permissions:/m, "droits donnés au seul travail publier");
   assert.match(w, /^  publier:\n(?:    #.*\n)*    if: .*\n    runs-on: .*\n(?:    #.*\n)*    permissions:\n      contents: write$/m);
-  assert.match(w, /- uses: actions\/checkout@v4\n        with:\n(?:          #.*\n)*          persist-credentials: false\n/, "jeton jamais laissé dans .git/config");
-  const uses = w.split("\n").flatMap((ligne, i, lignes) => (/^\s*- uses: /.test(ligne) ? [lignes[i - 1]] : []));
-  assert.ok(uses.length >= 3);
-  for (const avant of uses) assert.match(avant, /# à épingler par SHA avant la première publication \(tâche 20\)$/);
+  assert.match(w, /- uses: actions\/checkout@[0-9a-f]{40} # v4\n        with:\n(?:          #.*\n)*          persist-credentials: false\n/, "jeton jamais laissé dans .git/config");
   const ordre = ["git cat-file -t", "preparer-version.sh --verifier", "pnpm install --frozen-lockfile", "pnpm test", "error TS", "LAMA_CLE_SIGNATURE", "gh release create"];
   let avant = -1;
   for (const pas of ordre) {
@@ -104,4 +101,16 @@ test("changement de clé : la version N porte la nouvelle clé et reste signée 
   const verifier = (racine: string) => spawnSync("bash", ["-c", `source '${OUTIL}'; source '${join(DEPLOY, "verification.sh")}'; verifier_signature "$1" "$(cle_de_verification "$2")"`, "essai", dossier, racine], { env: envEssai({ LAMA_OPENSSL: openssl }) }).status;
   assert.equal(verifier(arbre(true)), 0);
   assert.notEqual(verifier(arbre(false)), 0);
+});
+
+test("clé publique des versions : une seule clé publique Ed25519, au format PEM (M-5)", () => {
+  const pem = readFileSync(new URL("../../deploy/cle-publique.pem", import.meta.url), "utf8");
+  assert.match(pem, /^-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=\n-----END PUBLIC KEY-----\n$/);
+});
+
+test("travail de publication : chaque action épinglée par un SHA de 40 caractères (tâche 20)", () => {
+  const travail = readFileSync(new URL("../../.github/workflows/publier-version.yml", import.meta.url), "utf8");
+  const actions = [...travail.matchAll(/^\s*- uses: (\S+)/gm)].map((m) => m[1]);
+  assert.ok(actions.length >= 3);
+  for (const a of actions) assert.match(a, /@[0-9a-f]{40}$/, a);
 });
