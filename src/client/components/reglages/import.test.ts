@@ -12,7 +12,7 @@ test("parcours : modèle, fichier, aperçu, import grisé tant qu'une ligne est 
   assert.match(rubrique, /apiUpload<ApercuImport>\("POST", cheminApercu\(type, d\), f\)/);
   assert.match(rubrique, /apiUpload<ApercuImport>\("POST", cheminImport\(type, desactiver\), fichier\)/);
   assert.match(rubrique, /disabled=\{!peutImporter\(apercu, pending\)\}/);
-  assert.match(rubrique, /accept="\.csv,text\/csv"/);
+  assert.match(rubrique, /accept="\.csv,\.xlsx,text\/csv,application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet"/);
   assert.match(rubrique, /f\.size > IMPORT_MAX_OCTETS/);
 });
 

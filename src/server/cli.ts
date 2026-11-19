@@ -10,7 +10,7 @@ import { decryptBackup, prepareRestore, runBackup, writeRestoreNote } from "./ba
 import { openDatabase, sqliteStorage } from "./storage.ts";
 import { decode, langFromEnv, message, MessageError } from "./messages.ts";
 import { analyserCatalogue, CatalogueRefuse, COLONNES_CATALOGUE, deviseDeLaBase, importerCatalogue, lireCatalogueTableau, type BilanImport, type ErreurLigne } from "./catalogue/import-catalogue.ts";
-import { decoderFichier, lireTableau } from "./import/csv.ts";
+import { lireFichier } from "./import/fichier.ts";
 import { retirerExemples } from "./import/modeles.ts";
 import { estCodeDevise } from "../shared/devises.ts";
 import { verifierRelais } from "./en-ligne/verifier-relais.ts";
@@ -164,13 +164,8 @@ async function main(argv: string[]) {
       console.error(message(lang, "cli.catalogue_fichier", { fichier }));
       return 1;
     }
-    const texte = decoderFichier(readFileSync(fichier));
-    if (texte === null) {
-      console.error(message(lang, "import.encodage"));
-      return 1;
-    }
-    // Erreur de fichier (en-tête, guillemets, vide, trop de lignes) : imprimée seule, son message porte déjà ce qu'il faut.
-    const lecture = lireTableau(texte, COLONNES_CATALOGUE);
+    // Erreur de fichier (encodage, classeur illisible, en-tête, guillemets, vide, trop de lignes) : imprimée seule, son message porte déjà ce qu'il faut.
+    const lecture = lireFichier(readFileSync(fichier), COLONNES_CATALOGUE);
     if (!lecture.ok) {
       console.error(message(lang, lecture.erreur.motif, lecture.erreur.valeurs));
       return 1;

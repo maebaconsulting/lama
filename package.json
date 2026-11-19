@@ -1,6 +1,6 @@
 {
   "name": "lama",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -37,6 +37,7 @@
     "age-encryption": "^0.3.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "fflate": "0.8.3",
     "hono": "^4.6.0",
     "jpeg-js": "^0.4.4",
     "lucide-preact": "^0.575.0",

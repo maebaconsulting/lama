@@ -1689,7 +1689,7 @@ export const en: Dictionary = {
   "en_ligne.liaison_enregistree": "Link saved.",
   // Data import (spec of 18/10/2026 § 2)
   "reglages.rubrique.import": "Import",
-  "import.description": "Bring in data from other software or a spreadsheet: download the template, fill it in, save it as “CSV UTF-8” and upload it. The preview writes nothing; nothing is imported before “Import”.",
+  "import.description": "Bring in data from other software or a spreadsheet: download the template, fill it in, then upload it as Excel saves it (.xlsx, first sheet read) or as “CSV UTF-8”. The preview writes nothing; nothing is imported before “Import”.",
   "import.catalogue.titre": "Service catalogue",
   "import.catalogue.aide": "A service is recognised by its category and name: it is updated, otherwise added. Its online setting is kept.",
   "import.clientes.titre": "Clients",
@@ -1720,7 +1720,7 @@ export const en: Dictionary = {
   "import.stocks_changes": "Stocks to replace: {n}",
   "import.premier_prix": "First price read: {prix}",
   "import.centimes": "Amounts in cents: 1500 for {exemple}.",
-  "import.excel": "In Excel, save as CSV UTF-8; dates may be written DD/MM/YYYY.",
+  "import.excel": "From Excel, upload the workbook as it is: only the first sheet is read, dates and times are recognised, and an amount shown as “15,000 FCFA” is read as 15000. An old .xls workbook must first be saved as .xlsx.",
   "import.avertissements": "To check: {n}",
   "import.importer": "Import",
   "import.bilan": "Import done: {liste}.",

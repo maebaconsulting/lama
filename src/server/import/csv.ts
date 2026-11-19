@@ -114,8 +114,12 @@ export function lireCsv(source: string): { ok: true; enregistrements: string[][]
  */
 export function lireTableau(source: string, colonnes: Colonnes): { ok: true; tableau: Tableau } | { ok: false; erreur: Motif } {
   const csv = lireCsv(source);
-  if (!csv.ok) return csv;
-  const [entete, ...donnees] = csv.enregistrements;
+  return csv.ok ? tableauDepuis(csv.enregistrements, colonnes) : csv;
+}
+
+/** Tableau d'enregistrements déjà lus (CSV ou classeur .xlsx) : mêmes contrôles que `lireTableau`. */
+export function tableauDepuis(enregistrements: string[][], colonnes: Colonnes): { ok: true; tableau: Tableau } | { ok: false; erreur: Motif } {
+  const [entete, ...donnees] = enregistrements;
   if (!entete || entete.every((c) => c.trim() === "")) return { ok: false, erreur: { motif: "import.vide" } };
   // Noms comparés sans accents ni majuscules : « Téléphone » ou « Référence » écrits par la personne sont reconnus.
   const noms = entete.map((c) => cle(c));

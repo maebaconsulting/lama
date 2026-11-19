@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { avecDemoPublique, setupApp } from "../test-support.ts";
 import { fichierRefuse } from "../formation/protections-demo.ts";
 import { IMPORT_MAX_OCTETS } from "../../shared/import.ts";
+import { classeurEssai } from "./xlsx-essai.ts";
 
 const CLIENTES = "nom;telephone;langue;anniversaire;preferences;whatsapp;notes";
 const csv = (texte: string) => Buffer.from(texte, "utf8");
@@ -198,4 +199,44 @@ test("catalogue : suppléments reconnus à l'aperçu ; nom introuvable refusé e
   assert.equal(n("SELECT COUNT(*) AS n FROM service_supplements"), 2);
   const cascade = await gerante("POST", "/api/import/catalogue/apercu", csv(`${entete}\nCoiffure;;;;Chignon;;60;15000;;#4A5D73;;;non;Nattes\n`), { "accept-language": "fr" });
   assert.deepEqual(cascade.body.refusees, [{ ligne: 2, motif: "«\u00a0Nattes\u00a0» a ses propres suppléments\u00a0: un supplément n'en a pas lui-même.", doublon: false }]);
+});
+
+test("classeur Excel (.xlsx) déposé tel quel : catalogue, produits et clientes importés comme depuis un CSV", async (t) => {
+  const { gerante, db, n } = await setup(t);
+  const catalogue = classeurEssai([
+    ["categorie", "categorie_en", "groupe", "groupe_en", "nom", "nom_en", "duree_min", "prix", "prix_max", "couleur", "remarque", "remarque_en"],
+    ["Coiffure", null, "Brushing", null, "Brushing court", null, 45, 8000, null, "#8A6F5A"],
+    ["Visage", "Facials", null, null, "Soin éclat", "Glow facial", 60, 15000, 20000, "#4A5D73"],
+  ]);
+  const apercu = await gerante("POST", "/api/import/catalogue/apercu", Buffer.from(catalogue));
+  assert.equal(apercu.status, 200, JSON.stringify(apercu.body));
+  assert.deepEqual([apercu.body.lignes, apercu.body.ajouts, apercu.body.refusees_total], [2, 2, 0]);
+  assert.equal(n("SELECT COUNT(*) AS n FROM services"), 0, "l'aperçu n'écrit rien");
+  assert.equal((await gerante("POST", "/api/import/catalogue", Buffer.from(catalogue))).status, 200);
+  assert.deepEqual(db.prepare("SELECT name, duration, price FROM services ORDER BY name").all().map((l) => ({ ...l })), [
+    { name: "Brushing court", duration: 45, price: 8000 },
+    { name: "Soin éclat", duration: 60, price: 15000 },
+  ]);
+
+  const produits = classeurEssai([
+    ["Nom", "Référence", "Prix", "Stock"],
+    ["Huile de coco", "HC-1", 4000, 12],
+  ]);
+  assert.equal((await gerante("POST", "/api/import/produits", Buffer.from(produits))).status, 200);
+  assert.deepEqual({ ...(db.prepare("SELECT name, sku, price, stock FROM products").get() as object) }, { name: "Huile de coco", sku: "HC-1", price: 4000, stock: 12 });
+
+  // Excel change « 14-02 » en date : l'anniversaire arrive en numéro de série, lu 2026-02-14, gardé 02-14.
+  const clientes = classeurEssai([["nom", "telephone", "anniversaire"], ["Awa", 699000001, { date: 46067 }]]);
+  assert.equal((await gerante("POST", "/api/import/clientes", Buffer.from(clientes))).status, 200);
+  assert.deepEqual({ ...(db.prepare("SELECT name, birthday FROM clients").get() as object) }, { name: "Awa", birthday: "02-14" });
+});
+
+test("ancien classeur .xls ou classeur abîmé : 400 avec un message qui dit quoi faire", async (t) => {
+  const { gerante } = await setup(t);
+  const xls = await gerante("POST", "/api/import/produits/apercu", Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), { "accept-language": "fr" });
+  assert.equal(xls.status, 400);
+  assert.match(xls.body.error, /Ancien format Excel \(\.xls\).*Classeur Excel \(\.xlsx\)/);
+  const abime = await gerante("POST", "/api/import/produits/apercu", Buffer.from(classeurEssai([["nom"]]).subarray(0, 80)), { "accept-language": "fr" });
+  assert.equal(abime.status, 400);
+  assert.match(abime.body.error, /^Classeur illisible/);
 });

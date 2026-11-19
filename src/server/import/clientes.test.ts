@@ -31,6 +31,14 @@ test("anniversaire : JJ-MM du fichier enregistré MM-JJ, date impossible refusé
   assert.equal(anniversaireDeFichier("02/14"), null);
 });
 
+test("anniversaire : date complète (AAAA-MM-JJ du classeur Excel, qui change « 14-02 » en date, ou date de naissance) réduite au jour et au mois", () => {
+  assert.equal(anniversaireDeFichier("2026-02-14"), "02-14");
+  assert.equal(anniversaireDeFichier("1990-02-14"), "02-14");
+  assert.equal(anniversaireDeFichier("2024-02-29"), "02-29");
+  assert.equal(anniversaireDeFichier("2026-02-30"), null);
+  assert.equal(anniversaireDeFichier("2026-02-14 10:00"), null);
+});
+
 test("anniversaire : JJ/MM laissé par le tableur accepté comme JJ-MM", () => {
   assert.equal(anniversaireDeFichier("14/02"), "02-14");
   assert.equal(anniversaireDeFichier("31/04"), null);

@@ -37,9 +37,14 @@ export function fichesParTelephone(db: Database, indicatif: string): Map<string,
   return fiches;
 }
 
-/** `JJ-MM` du fichier (§ 2.3), ou `JJ/MM` qu'écrit le tableur, en `MM-JJ` de la base ; `null` si la forme est fausse ou si le jour n'existe pas. */
+/**
+ * `JJ-MM` du fichier (§ 2.3), `JJ/MM` qu'écrit le tableur, ou date complète `AAAA-MM-JJ` (Excel change
+ * « 14-02 » en date, et une date de naissance s'y écrit entière), en `MM-JJ` de la base ; `null` si la forme
+ * est fausse ou si le jour n'existe pas.
+ */
 export function anniversaireDeFichier(v: string): string | null {
-  const m = /^(\d{2})[-/](\d{2})$/.exec(v);
+  const complete = /^\d{4}-(\d{2})-(\d{2})$/.exec(v);
+  const m = complete ? [v, complete[2], complete[1]] : /^(\d{2})[-/](\d{2})$/.exec(v);
   if (!m) return null;
   const enBase = `${m[2]}-${m[1]}`;
   return birthdayValid(enBase) ? enBase : null;

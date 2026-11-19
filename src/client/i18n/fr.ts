@@ -1688,7 +1688,7 @@ export const fr = {
   "en_ligne.liaison_enregistree": "Liaison enregistrée.",
   // Import de données (spec du 18/10/2026 § 2)
   "reglages.rubrique.import": "Import",
-  "import.description": "Reprendre les données d'un autre logiciel ou d'un tableur\u00a0: téléchargez le modèle, remplissez-le, enregistrez-le en «\u00a0CSV UTF-8\u00a0» puis déposez-le. L'aperçu n'écrit rien\u00a0; rien n'est importé avant «\u00a0Importer\u00a0».",
+  "import.description": "Reprendre les données d'un autre logiciel ou d'un tableur\u00a0: téléchargez le modèle, remplissez-le, puis déposez-le tel qu'Excel l'enregistre (.xlsx, première feuille lue) ou en «\u00a0CSV UTF-8\u00a0». L'aperçu n'écrit rien\u00a0; rien n'est importé avant «\u00a0Importer\u00a0».",
   "import.catalogue.titre": "Catalogue des prestations",
   "import.catalogue.aide": "Une prestation est reconnue par son univers et son nom\u00a0: elle est mise à jour, sinon ajoutée. Son réglage «\u00a0en ligne\u00a0» est gardé.",
   "import.clientes.titre": "Clientes",
@@ -1720,7 +1720,7 @@ export const fr = {
   "import.stocks_changes": "Stocks à remplacer\u00a0: {n}",
   "import.premier_prix": "Premier prix lu\u00a0: {prix}",
   "import.centimes": "Montants en centimes\u00a0: 1500 pour {exemple}.",
-  "import.excel": "Dans Excel, enregistrez au format CSV UTF-8\u00a0; les dates peuvent être au format JJ/MM/AAAA.",
+  "import.excel": "Depuis Excel, déposez le classeur tel quel\u00a0: seule la première feuille est lue, les dates et les heures sont reconnues, et un montant affiché «\u00a015\u00a0000\u00a0FCFA\u00a0» est lu 15000. Un ancien classeur .xls s'enregistre d'abord en .xlsx.",
   "import.importer": "Importer",
   "import.bilan": "Import terminé\u00a0: {liste}.",
   "import.bilan_ajoutes.one": "{count} ajout",

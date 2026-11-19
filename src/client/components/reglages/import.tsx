@@ -120,7 +120,7 @@ function BlocImport({ definition, fige }: { definition: DefinitionImport; fige: 
       </div>
       {fige
         ? <p className="max-w-prose text-sm text-encre-grise">{t("demo.fichiers_coupes")}</p>
-        : <input ref={champ} type="file" accept=".csv,text/csv" className="hidden" tabIndex={-1} aria-hidden="true" onChange={choisir} data-testid={`import-${type}-fichier`} />}
+        : <input ref={champ} type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" tabIndex={-1} aria-hidden="true" onChange={choisir} data-testid={`import-${type}-fichier`} />}
       {type === "catalogue" && <Case id="import-desactiver" label={t("import.desactiver")} hint={t("import.desactiver_aide")} checked={desactiver} disabled={pending || fige} onChange={changerDesactiver} />}
       {fichier && <p className="text-sm">{t("import.fichier", { nom: fichier.name })}</p>}
       {pending && <p role="status" className="text-sm text-encre-grise">{t("import.analyse")}</p>}

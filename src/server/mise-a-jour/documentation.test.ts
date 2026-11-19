@@ -54,3 +54,12 @@ test("guide de publication : étiquette annotée, note ---en---, clé, changemen
   for (const doc of [g, lire("docs/aide/fr/administrateur.md"), lire("docs/aide/en/administrator.md")]) assert.doesNotMatch(doc, /\u2014/);
   for (const ligne of prose(g)) assert.deepEqual(frenchFaults(ligne), [], ligne);
 });
+
+test("aide de l'administrateur : rubrique « Import » dans les deux langues, classeur .xlsx et CSV, typographie française", () => {
+  const fr = section(lire("docs/aide/fr/administrateur.md"), "## Import");
+  for (const attendu of ["Télécharger le modèle", "Choisir un fichier", "Aperçu, rien n'est encore écrit", "Désactiver les prestations absentes du fichier", "classeur Excel (.xlsx)", "première feuille", "CSV UTF-8", ".xls"]) assert.ok(fr.includes(attendu), attendu);
+  const en = section(lire("docs/aide/en/administrator.md"), "## Import");
+  for (const attendu of ["Download the template", "Choose a file", "Preview, nothing written yet", "Deactivate services missing from the file", "Excel workbook (.xlsx)", "first sheet", "CSV UTF-8", ".xls"]) assert.ok(en.includes(attendu), attendu);
+  for (const ligne of prose(fr)) assert.deepEqual(frenchFaults(ligne), [], ligne);
+  for (const ligne of prose(en)) assert.doesNotMatch(ligne, /\s[:;!?]/, ligne);
+});
