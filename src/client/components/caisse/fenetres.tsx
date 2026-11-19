@@ -98,11 +98,14 @@ export function ChoixCliente({ clients, current, onDone, onClose, onCreate }: {
 const PHONE_EXAMPLE = "+237 6 77 12 34 56";
 
 /**
- * Nouvelle cliente depuis la caisse : nom obligatoire, téléphone facultatif ;
- * le reste de la fiche se complète plus tard. Créée, elle est choisie pour le ticket.
+ * Nouvelle cliente depuis la caisse ou un nouveau rendez-vous : nom obligatoire,
+ * téléphone facultatif ; le reste de la fiche se complète plus tard. Créée, elle
+ * est choisie pour le ticket ou le rendez-vous.
  */
-function NouvelleCliente({ initialName, onCreate, onDone, onBack, onClose }: {
+export function NouvelleCliente({ initialName, libelleRetour, onCreate, onDone, onBack, onClose }: {
   initialName: string;
+  /** Texte du bouton de retour ; par défaut, le retour à la liste de la caisse. */
+  libelleRetour?: string;
   onCreate: (data: { name: string; phone: string }) => Promise<number>;
   onDone: (clientId: number) => void;
   onBack: () => void;
@@ -146,7 +149,7 @@ function NouvelleCliente({ initialName, onCreate, onDone, onBack, onClose }: {
           <Erreur message={error} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onBack}>{t("caisse.retour_liste")}</Button>
+          <Button variant="outline" onClick={onBack}>{libelleRetour ?? t("caisse.retour_liste")}</Button>
           <Button disabled={saving} onClick={() => void submit()}>{t("caisse.creer_et_choisir")}</Button>
         </DialogFooter>
       </DialogContent>

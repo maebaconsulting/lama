@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { useApp } from "../context";
-import { Check, TriangleAlert } from "lucide-preact";
+import { Check, Plus, TriangleAlert } from "lucide-preact";
 import { conflictsFrom, describeConflict, type Conflict } from "@/lib/conflicts";
 import { offeredStaffId } from "@/lib/agenda";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { useLoad } from "../hooks/use-load";
 import type { Product } from "../types";
 import { Erreur, useAmenerALaVue } from "./champ";
 import { ChoixSupplements } from "./supplements/choix";
+import { NouvelleCliente } from "./caisse/fenetres";
 
 interface Props {
   onClose: () => void;
@@ -35,9 +36,10 @@ interface Props {
 }
 
 export function CreateAppointment({ onClose, defaultDate, defaultClientId, defaultStaffId, defaultTime }: Props) {
-  const { addAppointment, clientLookup, staffLookup, services } = useApp();
+  const { addAppointment, addClient, clientLookup, staffLookup, services } = useApp();
   const { t, lang } = useI18n();
   const [clientId, setClientId] = useState(defaultClientId ? String(defaultClientId) : "");
+  const [creatingClient, setCreatingClient] = useState(false);
   const [staffId, setStaffId] = useState(() => offeredStaffId(defaultStaffId, staffLookup));
   const [date, setDate] = useState(defaultDate || todayAt());
   const [startTime, setStartTime] = useState(defaultTime || "09:00");
@@ -92,6 +94,20 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
     }
   };
 
+  // Cliente absente de la liste : créée sur place ; le formulaire reste monté, sa saisie n'est pas perdue.
+  if (creatingClient) {
+    return (
+      <NouvelleCliente
+        initialName=""
+        libelleRetour={t("commun.retour")}
+        onCreate={async (data) => (await addClient(data)).id}
+        onDone={(id) => { setClientId(String(id)); setCreatingClient(false); }}
+        onBack={() => setCreatingClient(false)}
+        onClose={() => setCreatingClient(false)}
+      />
+    );
+  }
+
   return (
     <Dialog open onOpenChange={(o: boolean) => { if (!o && !saving) onClose(); }}>
       <DialogContent>
@@ -106,6 +122,10 @@ export function CreateAppointment({ onClose, defaultDate, defaultClientId, defau
                 <option value="">{t("rdv.choisir_cliente")}</option>
                 {clientLookup.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              <Button type="button" variant="outline" className="w-full" onClick={() => setCreatingClient(true)}>
+                <Plus aria-hidden="true" />
+                {t("cliente.ajouter")}
+              </Button>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="nr-membre">{t("rdv.praticienne")}</Label>
